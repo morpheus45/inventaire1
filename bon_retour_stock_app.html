@@ -161,8 +161,8 @@
 
         <div class="row">
           <button class="btn green" id="btnSaveDraft">💾 Économiser (brouillon)</button>
-          <button class="btn blue" id="btnPrint1">🖨️ Imprimer (x1)</button>
-          <button class="btn blue right" id="btnPrint2">🖨️ Imprimer (x2 sur 1 A4)</button>
+          <button class="btn blue" id="btnPdf1">⬇️ Exporter PDF (x1)</button>
+          <button class="btn blue right" id="btnPdf2">⬇️ Exporter PDF (x2 sur 1 A4)</button>
         </div>
 
         <div class="small muted" style="margin-top:10px;line-height:1.4">
@@ -521,29 +521,80 @@ function createPrintedCopyFrom(b){
   return printed;
 }
 
-document.getElementById("btnPrint1").addEventListener("click", ()=>{
-  if(!validateBon()) return;
-  const printed = createPrintedCopyFrom(currentBon);
-  document.body.classList.add("print-1");
-  document.body.classList.remove("print-2");
-  renderPrint(printed,1);
-  // Après impression : nouveau bon (pour éviter réutilisation du numéro)
-  loadBon(newBon());
-  renderHist();
-  window.print();
-});
 
-document.getElementById("btnPrint2").addEventListener("click", ()=>{
+async function exportPDF(mode){
+  if(!window.html2canvas || !window.jspdf){
+    toast("Chargement PDF… réessaie dans 2 secondes.");
+    return;
+  }
   if(!validateBon()) return;
-  const printed = createPrintedCopyFrom(currentBon);
-  document.body.classList.add("print-2");
-  document.body.classList.remove("print-1");
-  renderPrint(printed,2);
-  loadBon(newBon());
-  renderHist();
-  window.print();
-});
 
+  const printed=createPrintedCopyFrom(currentBon);
+
+  // Prépare la vue A4 (x1 ou x2 sur la même page)
+  document.body.classList.remove("print-1","print-2");
+  document.body.classList.add(mode===2 ? "print-2" : "print-1");
+  renderPrint(printed, mode);
+
+  // Rendre la zone imprimable visible hors-écran pour capture
+  const area=document.querySelector(".printArea");
+  const a4=document.querySelector(".printArea .a4");
+  const prevStyle=area.getAttribute("style") || "";
+  area.setAttribute("style", prevStyle + ";display:block;position:fixed;left:-12000px;top:0;background:#fff;z-index:9999;");
+
+  // Laisse le navigateur appliquer le layout
+  await new Promise(r=>setTimeout(r, 80));
+
+  try{
+    const canvas=await html2canvas(a4, {scale:2, backgroundColor:"#ffffff", useCORS:true});
+    const img=canvas.toDataURL("image/jpeg", 1.0);
+
+    const { jsPDF } = window.jspdf;
+    const pdf=new jsPDF({orientation:"portrait", unit:"mm", format:"a4"});
+    // A4 : 210 x 297 mm
+    pdf.addImage(img, "JPEG", 0, 0, 210, 297);
+
+    const filename=`bon_sortie_stock_${printed.number}_x${mode}.pdf`;
+    const blob=pdf.output("blob");
+    const file=new File([blob], filename, {type:"application/pdf"});
+
+    // Partage (ouvre le choix d'app, ex: Epson iPrint) si dispo, sinon téléchargement
+    if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+      try{
+        await navigator.share({files:[file], title:"Bon de sortie de stock", text:"Bon de sortie / retour de stock"});
+      }catch(e){
+        pdf.save(filename);
+      }
+    }else{
+      pdf.save(filename);
+    }
+
+    toast("PDF prêt ✅");
+  }catch(err){
+    console.error(err);
+    toast("Erreur export PDF. Dis-moi ce que tu vois à l'écran.");
+  }finally{
+    // Restaure
+    if(prevStyle) area.setAttribute("style", prevStyle);
+    else area.removeAttribute("style");
+
+    // Après export : on archive + on repart sur un nouveau bon
+    const existing=bons.find(x=>x.id===currentBon.id);
+    if(existing){
+      existing.status="imprimé";
+      existing.number=printed.number;
+      saveBons();
+    }else{
+      bons.unshift(printed);
+      saveBons();
+    }
+    loadBon(newBon());
+    renderHist();
+  }
+}
+
+document.getElementById("btnPdf1").addEventListener("click", ()=>exportPDF(1));
+document.getElementById("btnPdf2").addEventListener("click", ()=>exportPDF(2));
 function formatFRDate(iso){
   if(!iso) return "";
   const [y,m,d]=iso.split("-");
@@ -665,8 +716,8 @@ function renderHist(){
       </div>
       <div class="row">
         <button class="btn primary" data-act="open" data-id="${b.id}">Ouvrir</button>
-        <button class="btn" data-act="print1" data-id="${b.id}">Impr. x1</button>
-        <button class="btn" data-act="print2" data-id="${b.id}">Impr. x2</button>
+        <button class="btn" data-act="pdf1" data-id="${b.id}">PDF x1</button>
+        <button class="btn" data-act="pdf2" data-id="${b.id}">PDF x2</button>
       </div>
     `;
     list.appendChild(el);
@@ -686,18 +737,61 @@ document.getElementById("histList").addEventListener("click",(e)=>{
   }
 
   // Re-impression : nouveau numéro à chaque fois (on ne réutilise jamais le même numéro)
-  if(btn.dataset.act==="print1" || btn.dataset.act==="print2"){
+if(btn.dataset.act==="pdf1" || btn.dataset.act==="pdf2"){
+    const original = bons.find(x=>x.id===btn.dataset.id);
+    if(!original){ toast("Bon introuvable"); return; }
+
+    const mode = btn.dataset.act==="pdf2" ? 2 : 1;
     const printed = createPrintedCopyFrom(original);
-    if(btn.dataset.act==="print1"){
-      document.body.classList.add("print-1"); document.body.classList.remove("print-2");
-      renderPrint(printed,1);
-    } else {
-      document.body.classList.add("print-2"); document.body.classList.remove("print-1");
-      renderPrint(printed,2);
-    }
-    renderHist();
-    window.print();
+
+    // Prépare rendu
+    document.body.classList.remove("print-1","print-2");
+    document.body.classList.add(mode===2 ? "print-2" : "print-1");
+    renderPrint(printed, mode);
+
+    const area=document.querySelector(".printArea");
+    const a4=document.querySelector(".printArea .a4");
+    const prevStyle=area.getAttribute("style") || "";
+    area.setAttribute("style", prevStyle + ";display:block;position:fixed;left:-12000px;top:0;background:#fff;z-index:9999;");
+
+    (async ()=>{
+      try{
+        const canvas=await html2canvas(a4, {scale:2, backgroundColor:"#ffffff", useCORS:true});
+        const img=canvas.toDataURL("image/jpeg", 1.0);
+
+        const { jsPDF } = window.jspdf;
+        const pdf=new jsPDF({orientation:"portrait", unit:"mm", format:"a4"});
+        pdf.addImage(img, "JPEG", 0, 0, 210, 297);
+
+        const filename=`bon_sortie_stock_${printed.number}_x${mode}.pdf`;
+        const blob=pdf.output("blob");
+        const file=new File([blob], filename, {type:"application/pdf"});
+
+        if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+          try{ await navigator.share({files:[file], title:"Bon de sortie de stock", text:"Bon de sortie / retour de stock"}); }
+          catch(e){ pdf.save(filename); }
+        }else{
+          pdf.save(filename);
+        }
+
+        // Met à jour le bon original (nouveau numéro à chaque export)
+        original.status="imprimé";
+        original.number=printed.number;
+        saveBons();
+        renderHist();
+        toast("PDF prêt ✅");
+      }catch(err){
+        console.error(err);
+        toast("Erreur export PDF.");
+      }finally{
+        if(prevStyle) area.setAttribute("style", prevStyle);
+        else area.removeAttribute("style");
+      }
+    })();
+
+    return;
   }
+}
 });
 
 /* Références */
@@ -826,6 +920,8 @@ document.getElementById("fileImport").addEventListener("change", async (e)=>{
 renderRefs(); renderCodes(); renderCodeSelect(); renderHist(); ensureBon();
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
 
 /* PWA: service worker + bouton installer */
