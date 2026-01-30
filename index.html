@@ -69,7 +69,48 @@
     .right{display:flex;justify-content:flex-end}
     .inline{display:flex;gap:10px;align-items:center}
     .inline > *{flex:1}
-  </style>
+  
+/* --- Statut NEUF / USITÉ (style "cartes" + interrupteurs) --- */
+.status-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:12px;
+}
+.status-card{
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:12px 12px 10px 12px;
+  background:#fff;
+}
+.status-neuf{ background:#eef5ff; }
+.status-usite{ background:#fff6dd; }
+.status-title{
+  font-weight:800;
+  letter-spacing:.4px;
+  margin-bottom:8px;
+}
+.status-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:6px 0;
+  border-top:1px dashed rgba(0,0,0,.08);
+}
+.status-row:first-of-type{ border-top:none; }
+.switch{ position:relative; display:inline-block; width:46px; height:26px; }
+.switch input{ opacity:0; width:0; height:0; }
+.slider{
+  position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0;
+  background:#cfcfcf; transition:.2s; border-radius:999px;
+}
+.slider:before{
+  position:absolute; content:""; height:20px; width:20px; left:3px; bottom:3px;
+  background:white; transition:.2s; border-radius:50%;
+}
+.switch input:checked + .slider{ background:#2563eb; }
+.switch input:checked + .slider:before{ transform:translateX(20px); }
+
+</style>
 </head>
 <body>
 <header>
@@ -121,8 +162,7 @@
         <div class="inline">
           <div>
             <label>Référence article</label>
-            <input id="refInput" list="refsList" placeholder="Ex: IR CO8 54" />
-            <datalist id="refsList"></datalist>
+            <select id="refSelect"></select>
           </div>
           <div style="max-width:140px">
             <label>Qté</label>
@@ -130,25 +170,33 @@
           </div>
         </div>
 
-        <div class="inline" style="margin-top:10px">
-          <div>
-            <label>Neuf</label>
-            <select id="neufSelect">
-              <option value="non">Non</option>
-              <option value="oui">Oui</option>
-            </select>
-          </div>
-          <div>
-            <label>Usité</label>
-            <select id="usiteSelect">
-              <option value="non">Non</option>
-              <option value="oui">Oui</option>
-            </select>
-          </div>
-        </div>
+        
+<div class="status-grid" style="margin-top:10px">
+  <div class="status-card status-neuf">
+    <div class="status-title">NEUF</div>
+    <div class="status-row"><span>Oui</span>
+      <label class="switch"><input type="checkbox" id="neufOui"><span class="slider"></span></label>
+    </div>
+    <div class="status-row"><span>Non</span>
+      <label class="switch"><input type="checkbox" id="neufNon"><span class="slider"></span></label>
+    </div>
+  </div>
 
-        <div style="margin-top:10px">
-          <label>Commentaire (optionnel)</label>
+  <div class="status-card status-usite">
+    <div class="status-title">USITÉ</div>
+    <div class="status-row"><span>Oui</span>
+      <label class="switch"><input type="checkbox" id="usiteOui"><span class="slider"></span></label>
+    </div>
+    <div class="status-row"><span>Non</span>
+      <label class="switch"><input type="checkbox" id="usiteNon"><span class="slider"></span></label>
+    </div>
+  </div>
+</div>
+
+<input type="hidden" id="neufSelect" value="non">
+<input type="hidden" id="usiteSelect" value="non">
+
+<label>Commentaire (optionnel)</label>
           <input id="commentInput" placeholder="Ex: HS, retour, etc." />
         </div>
 
@@ -255,28 +303,7 @@
 <!-- jsPDF (UMD) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 
-<script>// --- Diagnostic global (affiche les erreurs JS à l'écran) ---
-(function(){
-  const banner = document.createElement('div');
-  banner.id = 'jsErrorBanner';
-  banner.style.cssText = 'display:none;position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#b00020;color:#fff;padding:10px 12px;font:14px/1.3 system-ui,-apple-system,Segoe UI,Roboto,Arial;box-shadow:0 -6px 16px rgba(0,0,0,.25)';
-  banner.innerHTML = '<strong>Erreur</strong> : <span id="jsErrorText"></span> <button id="jsErrorClose" style="float:right;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:10px;padding:4px 10px;cursor:pointer">OK</button>';
-  document.addEventListener('DOMContentLoaded', () => {
-    document.body.appendChild(banner);
-    document.getElementById('jsErrorClose').onclick = ()=> banner.style.display='none';
-  });
-  function show(msg){
-    try{
-      const el = document.getElementById('jsErrorText');
-      if(el) el.textContent = msg;
-      banner.style.display='block';
-    }catch(_){}
-  }
-  window.addEventListener('error', (e)=> show((e && e.message) ? e.message : 'Erreur JavaScript'));
-  window.addEventListener('unhandledrejection', (e)=> show((e && e.reason && (e.reason.message||e.reason)) ? (e.reason.message||String(e.reason)) : 'Promesse rejetée'));
-})();
-document.addEventListener('DOMContentLoaded', () => {
-
+<script>
 /* --------------------- Storage keys --------------------- */
 const K = {
   refs: "inv_refs_v1",
@@ -381,7 +408,37 @@ function initData(){
   fillSelect($("emetteur"), emit);
   fillSelect($("magasin"), mags);
 
-  $("refsList").innerHTML = refs.map(r => `<option value="${r.replaceAll('"','&quot;')}"></option>`).join("");
+  // Menu déroulant des références
+  const refSel = $("refSelect");
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+
+  // L’émetteur doit correspondre au magasin
+  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
+  // init: aligne au chargement
+  $("emetteur").value = $("magasin").value;
+
+  // Interrupteurs NEUF / USITÉ
+  function setNeuf(v){
+    const yes = (v === "oui");
+    $("neufOui").checked = yes; $("neufNon").checked = !yes;
+    $("neufSelect").value = v;
+    if(yes) setUsite("non");
+  }
+  function setUsite(v){
+    const yes = (v === "oui");
+    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
+    $("usiteSelect").value = v;
+    if(yes) setNeuf("non");
+  }
+  // valeurs par défaut
+  setNeuf("non");
+  setUsite("non");
+  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
+  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
+  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
+  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
+
 }
 
 /* --------------------- Lines rendering --------------------- */
@@ -421,7 +478,7 @@ function escapeHTML(s){
 
 /* --------------------- Add line --------------------- */
 $("btnAdd").addEventListener("click", () => {
-  const ref = sanitizeRef($("refInput").value);
+  const ref = sanitizeRef($("refSelect").value);
   if(!ref){
     alert("Renseigne une référence.");
     return;
@@ -439,10 +496,40 @@ $("btnAdd").addEventListener("click", () => {
   if(!refs.includes(ref)){
     refs.unshift(ref);
     saveJSON(K.refs, refs.slice(0,200));
-    $("refsList").innerHTML = refs.map(r => `<option value="${r.replaceAll('"','&quot;')}"></option>`).join("");
+    // Menu déroulant des références
+  const refSel = $("refSelect");
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+
+  // L’émetteur doit correspondre au magasin
+  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
+  // init: aligne au chargement
+  $("emetteur").value = $("magasin").value;
+
+  // Interrupteurs NEUF / USITÉ
+  function setNeuf(v){
+    const yes = (v === "oui");
+    $("neufOui").checked = yes; $("neufNon").checked = !yes;
+    $("neufSelect").value = v;
+    if(yes) setUsite("non");
+  }
+  function setUsite(v){
+    const yes = (v === "oui");
+    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
+    $("usiteSelect").value = v;
+    if(yes) setNeuf("non");
+  }
+  // valeurs par défaut
+  setNeuf("non");
+  setUsite("non");
+  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
+  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
+  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
+  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
+
   }
 
-  $("refInput").value = "";
+  $("refSelect").selectedIndex = 0;
   $("qtyInput").value = "1";
   $("commentInput").value = "";
   $("neufSelect").value = "non";
@@ -450,11 +537,13 @@ $("btnAdd").addEventListener("click", () => {
 });
 
 $("btnClearLine").addEventListener("click", () => {
-  $("refInput").value = "";
+  $("refSelect").selectedIndex = 0;
   $("qtyInput").value = "1";
   $("commentInput").value = "";
   $("neufSelect").value = "non";
   $("usiteSelect").value = "non";
+  if ($("neufOui")) { $("neufOui").checked = false; $("neufNon").checked = true; }
+  if ($("usiteOui")) { $("usiteOui").checked = false; $("usiteNon").checked = true; }
 });
 
 /* --------------------- Draft / new --------------------- */
@@ -752,7 +841,11 @@ function renderRefs(){
       refs2.splice(Number(b.dataset.rdel),1);
       saveJSON(K.refs, refs2);
       renderRefs();
-      $("refsList").innerHTML = refs2.map(r => `<option value="${r.replaceAll('"','&quot;')}"></option>`).join("");
+      // Menu déroulant des références (après ajout/suppression)
+  const refSel2 = $("refSelect");
+  const opts = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs2.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+  refSel2.innerHTML = opts;
     });
   });
 }
@@ -764,7 +857,37 @@ $("btnAddRef").addEventListener("click", () => {
   saveJSON(K.refs, refs.slice(0,200));
   $("newRef").value = "";
   renderRefs();
-  $("refsList").innerHTML = refs.map(r => `<option value="${r.replaceAll('"','&quot;')}"></option>`).join("");
+  // Menu déroulant des références
+  const refSel = $("refSelect");
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+
+  // L’émetteur doit correspondre au magasin
+  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
+  // init: aligne au chargement
+  $("emetteur").value = $("magasin").value;
+
+  // Interrupteurs NEUF / USITÉ
+  function setNeuf(v){
+    const yes = (v === "oui");
+    $("neufOui").checked = yes; $("neufNon").checked = !yes;
+    $("neufSelect").value = v;
+    if(yes) setUsite("non");
+  }
+  function setUsite(v){
+    const yes = (v === "oui");
+    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
+    $("usiteSelect").value = v;
+    if(yes) setNeuf("non");
+  }
+  // valeurs par défaut
+  setNeuf("non");
+  setUsite("non");
+  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
+  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
+  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
+  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
+
 });
 
 /* --------------------- Magasins --------------------- */
@@ -832,8 +955,6 @@ if(draft){
 }else{
   renderLines();
 }
-
-});
 </script>
 </body>
 </html>
