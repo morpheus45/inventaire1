@@ -1,4 +1,5 @@
-const CACHE_NAME = "inventaire-pwa-v4-fix1";
+/* Stock et Inventaire - Service Worker (offline-first) */
+const CACHE_NAME = "stock-inventaire-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,7 +8,6 @@ const ASSETS = [
   "./icon-512.png"
 ];
 
-// Install: pre-cache core assets
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
@@ -15,7 +15,6 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean old caches
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -25,35 +24,23 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch: cache-first for same-origin assets, network-first for navigation
+// Offline-first for same-origin GET
 self.addEventListener("fetch", (event) => {
   const req = event.request;
+  if (req.method !== "GET") return;
+
   const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
 
-  if (url.origin === self.location.origin) {
-    // HTML navigation: network-first so updates come through
-    if (req.mode === "navigate") {
-      event.respondWith(
-        fetch(req).then((resp) => {
-          const copy = resp.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));
-          return resp;
-        }).catch(() => caches.match("./index.html"))
-      );
-      return;
-    }
-
-    // Other same-origin assets: cache-first
-    event.respondWith(
-      caches.match(req).then((cached) => cached || fetch(req).then((resp) => {
+  event.respondWith(
+    caches.match(req).then((cached) => {
+      const fetchPromise = fetch(req).then((resp) => {
+        // update cache in background
         const copy = resp.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(()=>{});
         return resp;
-      }))
-    );
-    return;
-  }
-
-  // Cross-origin: just go to network
-  event.respondWith(fetch(req));
+      }).catch(() => cached);
+      return cached || fetchPromise;
+    })
+  );
 });
