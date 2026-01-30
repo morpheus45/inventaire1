@@ -2,258 +2,238 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#1d4ed8" />
-  <title>Gestion d'Inventaire – Bon de sortie / retour</title>
+  <title>Bon de sortie / retour de stock</title>
 
-  <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="icon-192.png" />
-  <link rel="apple-touch-icon" href="icon-192.png" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
   <style>
-    :root{
-      --bg:#f5f7fb;
-      --card:#ffffff;
-      --text:#111827;
-      --muted:#6b7280;
-      --blue:#1d4ed8;
-      --green:#16a34a;
-      --red:#dc2626;
-      --border:#e5e7eb;
-      --shadow:0 10px 30px rgba(17,24,39,.08);
-      --radius:18px;
-    }
+    :root{--bg:#f5f7fb;--card:#fff;--muted:#6b7280;--text:#111827;--blue2:#2563eb;--green:#16a34a;--border:#e5e7eb;--shadow:0 10px 30px rgba(17,24,39,.08);--radius:18px}
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,#0b1220 0%, #0b1220 60%, rgba(11,18,32,0) 100%);padding:14px 14px 10px}
-    header .bar{display:flex;gap:10px;align-items:center;color:#fff}
-    header .logo{width:38px;height:38px;border-radius:12px;background:#0ea5e9;display:flex;align-items:center;justify-content:center;font-weight:800}
-    header h1{font-size:18px;margin:0}
-    header .sub{font-size:12px;color:rgba(255,255,255,.75);margin:2px 0 0}
-    .wrap{max-width:980px;margin:0 auto;padding:12px 14px 24px}
-    .grid{display:grid;grid-template-columns:1fr;gap:12px}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
-    .row{display:grid;grid-template-columns:1fr;gap:10px}
-    @media(min-width:860px){ .row{grid-template-columns:1fr 1fr} }
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    header{position:sticky;top:0;z-index:50;background:rgba(245,247,251,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+    .wrap{max-width:1100px;margin:0 auto;padding:14px}
+    h1{margin:0;font-size:26px;line-height:1.15}
+    .sub{color:var(--muted);margin-top:6px;font-size:14px}
+    .tabs{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .tab{display:inline-flex;gap:8px;align-items:center;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;cursor:pointer;user-select:none}
+    .tab.active{background:rgba(37,99,235,.10);border-color:rgba(37,99,235,.25)}
+    .grid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:14px}
+    @media(min-width:920px){.grid{grid-template-columns:520px 1fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+    .hd{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .bd{padding:14px}
+    .btn{appearance:none;border:1px solid var(--border);background:#fff;color:var(--text);padding:10px 12px;border-radius:12px;cursor:pointer}
+    .btn:active{transform:translateY(1px)}
+    .btn.primary{background:rgba(37,99,235,.10);border-color:rgba(37,99,235,.25)}
+    .btn.blue{background:var(--blue2);border-color:var(--blue2);color:#fff}
+    .btn.green{background:var(--green);border-color:var(--green);color:#fff}
+    .btn.small{padding:8px 10px;border-radius:10px;font-size:13px}
+    .btn:disabled{opacity:.55;cursor:not-allowed}
+    label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px}
+    input,select,textarea{width:100%;padding:11px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;outline:none}
+    textarea{min-height:86px;resize:vertical}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .right{margin-left:auto}
+    .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid var(--border);background:#fff}
+    .badge.blue{border-color:rgba(37,99,235,.25);background:rgba(37,99,235,.08)}
+    .badge.gray{color:var(--muted)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
+    .muted{color:var(--muted)}
+    .small{font-size:12px}
+    .divider{height:1px;background:var(--border);margin:12px 0}
+    .list{display:grid;gap:10px}
+    .itemCard{border:1px solid var(--border);border-radius:16px;padding:12px;background:#fff;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+    .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:5px 10px;font-size:12px;background:#fff;color:var(--muted)}
+    .chip strong{color:var(--text)}
+    .sumTitle{font-weight:900}
+    .sumSub{font-size:12px;color:var(--muted);margin-top:2px}
+    .sumGrid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    .sumBox{border:1px solid var(--border);border-radius:14px;padding:8px 10px;background:#fff;font-size:12px}
 
-    label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
-    input, select, textarea{
-      width:100%;padding:11px 12px;border:1px solid var(--border);
-      border-radius:14px;background:#fff;font-size:15px;outline:none;
-    }
-    textarea{min-height:90px;resize:vertical}
-    .btns{display:flex;flex-wrap:wrap;gap:10px}
-    button{
-      border:0;border-radius:14px;padding:12px 14px;font-size:15px;
-      cursor:pointer;box-shadow:0 8px 18px rgba(17,24,39,.10);
-      display:inline-flex;align-items:center;gap:10px;
-    }
-    .primary{background:var(--blue);color:#fff}
-    .ghost{background:#eef2ff;color:#111827}
-    .success{background:var(--green);color:#fff}
-    .danger{background:#fee2e2;color:#7f1d1d}
-    .small{font-size:13px;padding:10px 12px;border-radius:12px;box-shadow:none}
-    .hint{color:var(--muted);font-size:12px;line-height:1.35}
-    .tabs{display:flex;gap:10px;flex-wrap:wrap}
-    .tab{background:#fff;border:1px solid var(--border);border-radius:16px;padding:10px 12px;cursor:pointer}
-    .tab.active{border-color:#93c5fd;box-shadow:0 10px 30px rgba(37,99,235,.10)}
-    .hidden{display:none}
+    /* toggles */
+    .yn{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .ynbox{border:1px solid var(--border);border-radius:16px;padding:12px;background:#fff}
+    .ynbox.neuf{background:#e8f1ff}
+    .ynbox.usite{background:#fff6dd}
+    .ynTitle{font-weight:800;margin-bottom:8px}
+    .ynRow{display:flex;align-items:center;justify-content:space-between;padding:6px 0}
+    .toggle{width:52px;height:30px;border-radius:999px;background:#e5e7eb;position:relative;cursor:pointer;flex:0 0 auto}
+    .toggle::after{content:"";position:absolute;top:4px;left:4px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+    .toggle.on{background:rgba(37,99,235,.35)}
+    .toggle.on::after{left:26px}
 
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;font-size:14px;vertical-align:top}
-    th{color:var(--muted);font-size:12px;font-weight:600}
-    .pill{display:inline-flex;gap:6px;align-items:center;padding:4px 10px;border-radius:999px;background:#f3f4f6;color:#111827;font-size:12px}
-    .x{font-weight:800}
-    .right{display:flex;justify-content:flex-end}
-    .inline{display:flex;gap:10px;align-items:center}
-    .inline > *{flex:1}
+    /* print */
+    .printArea{display:none}
+    @media print{
+      header, main, .toast {display:none !important}
+      body{background:#fff}
+      .printArea{display:block}
+    }
+    .a4{width:210mm;min-height:297mm;margin:0 auto}
+    .copy{padding:10mm 10mm 8mm 10mm}
+    .cut{border-top:1px dashed #999;margin:6mm 0}
+    body.print-1 .cut, body.print-1 #printCopy2Wrap{display:none}
+    .bon{border:1px solid #111;padding:8mm;font-family:Arial,sans-serif;color:#000;background:#fff}
+    .bonTop{display:grid;grid-template-columns:38mm 1fr 52mm;gap:6mm;align-items:start}
+    .logoBox{width:38mm;height:22mm;border:1px solid #111;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;letter-spacing:.5px;background:#f2f2f2}
+    .titleBox{font-size:16px;font-weight:800;letter-spacing:.3px}
+    .subtitleBox{font-size:10px;margin-top:2mm}
+    .numBox{border:1px solid #111;padding:3mm 4mm;font-size:18px;font-weight:800;color:#c00;text-align:center}
+    .meta{margin-top:4mm;display:grid;grid-template-columns:1fr 1fr;gap:2mm 10mm;font-size:11px}
+    .meta div{display:flex;gap:2mm}
+    .meta .lbl{min-width:26mm;font-weight:700}
+    .meta .val{border-bottom:1px solid #111;flex:1}
+    .tableWrap{margin-top:5mm;border:1px solid #111}
+    table.bonTable{width:100%;border-collapse:collapse;font-size:11px}
+    table.bonTable th, table.bonTable td{border:1px solid #111;padding:2.2mm 2mm;vertical-align:middle}
+    table.bonTable th{background:#d9dde6;font-weight:800;text-transform:uppercase;font-size:10px}
+    table.bonTable .center{text-align:center}
+    .x{font-weight:900;font-size:14px;line-height:1}
+    .obs{margin-top:4mm;font-size:11px}
+    .obsLine{border-bottom:1px dotted #111;min-height:6mm;white-space:pre-wrap}
+    .foot{margin-top:4mm;font-size:10px;text-align:right}
+
+    .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:300;display:none;background:#111827;color:#fff;border-radius:999px;padding:10px 12px;max-width:calc(100% - 24px)}
+    .toast.on{display:block}
   </style>
 </head>
 <body>
 <header>
-  <div class="bar">
-    <div class="logo">📦</div>
-    <div>
-      <h1>Gestion d'Inventaire</h1>
-      <div class="sub">Bon de sortie / retour de stock — conforme (2 bons sur 1 A4)</div>
+  <div class="wrap">
+    <div class="row">
+      <div>
+        <h1>Gestion d'Inventaire</h1>
+        <div class="sub">Bon de sortie / retour de stock — sans scanner</div>
+      </div>
+      <button class="btn" id="btnInstall" style="display:none">⬇️ Installer</button>
+      <span class="right badge gray">Sauvegarde locale</span>
+    </div>
+    <div class="tabs" role="tablist">
+      <div class="tab active" data-tab="bon">📄 Nouveau Bon</div>
+      <div class="tab" data-tab="hist">🕘 Historique</div>
+      <div class="tab" data-tab="refs">📦 Références</div>
+      <div class="tab" data-tab="codes">🏬 Codes</div>
     </div>
   </div>
 </header>
 
-<div class="wrap">
-  <div class="tabs">
-    <div class="tab active" data-tab="bon">🧾 Nouveau Bon</div>
-    <div class="tab" data-tab="hist">🕘 Historique</div>
-    <div class="tab" data-tab="refs">📦 Références</div>
-    <div class="tab" data-tab="codes">🏬 Magasins</div>
-  </div>
-
-  <div class="grid" style="margin-top:12px">
-    <!-- BON -->
-    <section class="card" id="tab-bon">
-      <div class="row">
-        <div>
-          <label>Émetteur (code technicien)</label>
-          <select id="emetteur"></select>
+<main class="wrap">
+  <section id="page-bon" class="grid">
+    <div class="card">
+      <div class="hd">
+        <div class="row" style="gap:8px">
+          <span class="badge blue">BON DE SORTIE DE STOCK</span>
+          <span class="badge gray">N° <span class="mono" id="bonNumber">—</span></span>
+          <span class="badge gray" id="bonStatus">Brouillon</span>
         </div>
-        <div>
-          <label>Magasin (code magasin)</label>
-          <select id="magasin"></select>
-        </div>
+        <button class="btn" id="btnResetBon">↩️ Réinitialiser</button>
       </div>
+      <div class="bd">
+        <label>Code Magasin/Technicien *</label>
+        <select id="bonCode"></select>
 
-      <div class="row">
-        <div>
-          <label>Destinataire</label>
-          <input id="destinataire" value="STOCK CENTRAL" />
+        <label>Date</label>
+        <input id="bonDate" type="date" />
+
+        <label>Destinataire</label>
+        <input id="bonDest" placeholder="STOCK CENTRAL" />
+
+        <div class="divider"></div>
+
+        <div class="row">
+          <div style="font-weight:800">Articles (<span id="articleCount">0</span>)</div>
+          <button class="btn primary right" id="btnAddArticle">＋ Ajouter un article</button>
         </div>
-        <div>
-          <label>Date</label>
-          <input id="date" type="date" />
-        </div>
-      </div>
+        <div id="articles" class="list" style="margin-top:10px"></div>
 
-      <hr style="border:none;border-top:1px solid var(--border);margin:14px 0" />
+        <div class="divider"></div>
 
-      <div class="card" style="box-shadow:none;padding:12px;border-radius:16px">
-        <div class="inline">
-          <div>
-            <label>Référence article</label>
-            <input id="refInput" list="refsList" placeholder="Ex: IR CO8 54" />
-            <datalist id="refsList"></datalist>
-          </div>
-          <div style="max-width:140px">
-            <label>Qté</label>
-            <input id="qtyInput" type="number" min="1" step="1" value="1" />
-          </div>
-        </div>
-
-        <div class="inline" style="margin-top:10px">
-          <div>
-            <label>Neuf</label>
-            <select id="neufSelect">
-              <option value="non">Non</option>
-              <option value="oui">Oui</option>
-            </select>
-          </div>
-          <div>
-            <label>Usité</label>
-            <select id="usiteSelect">
-              <option value="non">Non</option>
-              <option value="oui">Oui</option>
-            </select>
-          </div>
-        </div>
-
-        <div style="margin-top:10px">
-          <label>Commentaire (optionnel)</label>
-          <input id="commentInput" placeholder="Ex: HS, retour, etc." />
-        </div>
-
-        <div class="btns" style="margin-top:12px">
-          <button class="success" id="btnAdd">✅ Valider l’article</button>
-          <button class="ghost small" id="btnClearLine">Effacer la saisie</button>
-        </div>
-
-        <div class="hint" style="margin-top:10px">
-          Astuce : la référence reste modifiable (tu peux la corriger avant de valider).
-        </div>
-      </div>
-
-      <div style="margin-top:12px">
-        <table>
-          <thead>
-            <tr>
-              <th>Référence</th>
-              <th>Qté</th>
-              <th>Neuf</th>
-              <th>Usité</th>
-              <th>Commentaire</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="lines"></tbody>
-        </table>
-        <div class="hint" id="limitHint" style="margin-top:8px"></div>
-      </div>
-
-      <div style="margin-top:12px">
         <label>Observations</label>
-        <textarea id="observations" placeholder="Notes ou observations…"></textarea>
-      </div>
+        <textarea id="bonObs" placeholder="Notes ou observations..."></textarea>
 
-      <div class="btns" style="margin-top:14px">
-        <button class="primary" id="btnPdf">⬇️ Exporter PDF (2 bons sur 1 A4)</button>
-        <button class="ghost" id="btnShare">📲 Partager le PDF</button>
-        <button class="ghost" id="btnSaveDraft">💾 Économiser (brouillon)</button>
-        <button class="danger" id="btnNew">🗑️ Nouveau bon</button>
-      </div>
+        <div class="divider"></div>
 
-      <div class="hint" style="margin-top:10px">
-        Important : chaque export PDF crée un <b>nouveau numéro de bon</b> (unique sur cet appareil via localStorage).
-      </div>
-    </section>
+        <div class="row">
+          <button class="btn green" id="btnSaveDraft">💾 Économiser (brouillon)</button>
+          <button class="btn blue" id="btnPrint1">🖨️ Imprimer (x1)</button>
+          <button class="btn blue right" id="btnPrint2">🖨️ Imprimer (x2 sur 1 A4)</button>
+        </div>
 
-    <!-- HISTORIQUE -->
-    <section class="card hidden" id="tab-hist">
-      <div class="btns" style="margin-bottom:10px">
-        <button class="ghost" id="btnRefreshHist">🔄 Actualiser</button>
-        <button class="danger" id="btnClearHist">🗑️ Vider l’historique</button>
+        <div class="small muted" style="margin-top:10px;line-height:1.4">
+          Sauvegarde locale via <span class="mono">localStorage</span>. MDN :
+          https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage<br/>
+          <b>Important :</b> chaque impression crée un <b>nouveau numéro de bon</b> (unique).
+        </div>
       </div>
-      <div id="histWrap" class="hint"></div>
-    </section>
+    </div>
 
-    <!-- REFERENCES -->
-    <section class="card hidden" id="tab-refs">
-      <div class="row">
+    <div class="card">
+      <div class="hd">
         <div>
-          <label>Ajouter une référence</label>
-          <input id="newRef" placeholder="Ex: IR CO8 54" />
+          <div style="font-weight:800">Objectif</div>
+          <div class="small muted">Transcrire le bon comme ta feuille</div>
         </div>
-        <div class="right" style="align-items:end">
-          <button class="success" id="btnAddRef">➕ Ajouter</button>
+        <div class="row right">
+          <button class="btn" id="btnExport">⬇️ Export</button>
+          <button class="btn" id="btnImport">⬆️ Import</button>
+          <input id="fileImport" type="file" accept="application/json" hidden />
         </div>
       </div>
-      <div class="hint" style="margin-top:6px">Les références sont enregistrées localement (sur cet appareil).</div>
-      <div style="margin-top:12px">
-        <table>
-          <thead><tr><th>Référence</th><th></th></tr></thead>
-          <tbody id="refsTable"></tbody>
-        </table>
+      <div class="bd">
+        <div class="muted" style="font-size:13px;line-height:1.5">
+          • Ajout d’article : tu remplis puis <b>Valider</b> → ça passe en mode compact (visible et modifiable).<br/>
+          • Impression : 1 exemplaire (x1) ou 2 exemplaires sur une seule feuille A4 (x2).<br/>
+          • Les références et magasins restent enregistrés pour les prochaines fois.
+        </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <!-- MAGASINS -->
-    <section class="card hidden" id="tab-codes">
-      <div class="row">
-        <div>
-          <label>Ajouter un magasin (code + libellé)</label>
-          <input id="newMagCode" placeholder="Ex: ISTGS55" />
-        </div>
-        <div>
-          <label>Libellé</label>
-          <input id="newMagLabel" placeholder="Ex: Jean Robert" />
-        </div>
+  <section id="page-hist" class="card" style="display:none">
+    <div class="hd">
+      <div>
+        <div style="font-weight:800">Historique des Bons</div>
+        <div class="small muted">Ouvre un brouillon pour modifier</div>
       </div>
-      <div class="btns" style="margin-top:10px">
-        <button class="success" id="btnAddMag">➕ Ajouter</button>
-      </div>
-      <div class="hint" style="margin-top:6px">Les magasins sont enregistrés localement (sur cet appareil).</div>
+      <input id="histSearch" placeholder="Rechercher (numéro, destinataire, code...)" style="width:280px" />
+    </div>
+    <div class="bd">
+      <div id="histList" class="list"></div>
+    </div>
+  </section>
 
-      <div style="margin-top:12px">
-        <table>
-          <thead><tr><th>Code</th><th>Libellé</th><th></th></tr></thead>
-          <tbody id="magTable"></tbody>
-        </table>
-      </div>
-    </section>
+  <section id="page-refs" class="card" style="display:none">
+    <div class="hd">
+      <div style="font-weight:800">Références</div>
+      <button class="btn primary right" id="btnAddRef">＋ Ajouter</button>
+    </div>
+    <div class="bd"><div id="refList" class="list"></div></div>
+  </section>
+
+  <section id="page-codes" class="card" style="display:none">
+    <div class="hd">
+      <div style="font-weight:800">Codes Magasin / Technicien</div>
+      <button class="btn primary right" id="btnAddCode">＋ Ajouter</button>
+    </div>
+    <div class="bd"><div id="codeList" class="list"></div></div>
+  </section>
+</main>
+
+<div class="printArea">
+  <div class="a4">
+    <div class="copy"><div id="printCopy1"></div></div>
+    <div class="cut"></div>
+    <div class="copy" id="printCopy2Wrap"><div id="printCopy2"></div></div>
   </div>
 </div>
 
-<!-- jsPDF (UMD) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<div class="toast" id="toast"></div>
 
 <script>
 /* =======================
