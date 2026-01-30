@@ -69,7 +69,48 @@
     .right{display:flex;justify-content:flex-end}
     .inline{display:flex;gap:10px;align-items:center}
     .inline > *{flex:1}
-  </style>
+  
+/* --- Statut NEUF / USITÉ (style "cartes" + interrupteurs) --- */
+.status-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:12px;
+}
+.status-card{
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:12px 12px 10px 12px;
+  background:#fff;
+}
+.status-neuf{ background:#eef5ff; }
+.status-usite{ background:#fff6dd; }
+.status-title{
+  font-weight:800;
+  letter-spacing:.4px;
+  margin-bottom:8px;
+}
+.status-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:6px 0;
+  border-top:1px dashed rgba(0,0,0,.08);
+}
+.status-row:first-of-type{ border-top:none; }
+.switch{ position:relative; display:inline-block; width:46px; height:26px; }
+.switch input{ opacity:0; width:0; height:0; }
+.slider{
+  position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0;
+  background:#cfcfcf; transition:.2s; border-radius:999px;
+}
+.slider:before{
+  position:absolute; content:""; height:20px; width:20px; left:3px; bottom:3px;
+  background:white; transition:.2s; border-radius:50%;
+}
+.switch input:checked + .slider{ background:#2563eb; }
+.switch input:checked + .slider:before{ transform:translateX(20px); }
+
+</style>
 </head>
 <body>
 <header>
@@ -121,8 +162,7 @@
         <div class="inline">
           <div>
             <label>Référence article</label>
-            <input id="refInput" list="refsList" placeholder="Ex: IR CO8 54" />
-            <datalist id="refsList"></datalist>
+            <select id="refSelect"></select>
           </div>
           <div style="max-width:140px">
             <label>Qté</label>
@@ -130,25 +170,33 @@
           </div>
         </div>
 
-        <div class="inline" style="margin-top:10px">
-          <div>
-            <label>Neuf</label>
-            <select id="neufSelect">
-              <option value="non">Non</option>
-              <option value="oui">Oui</option>
-            </select>
-          </div>
-          <div>
-            <label>Usité</label>
-            <select id="usiteSelect">
-              <option value="non">Non</option>
-              <option value="oui">Oui</option>
-            </select>
-          </div>
-        </div>
+        
+<div class="status-grid" style="margin-top:10px">
+  <div class="status-card status-neuf">
+    <div class="status-title">NEUF</div>
+    <div class="status-row"><span>Oui</span>
+      <label class="switch"><input type="checkbox" id="neufOui"><span class="slider"></span></label>
+    </div>
+    <div class="status-row"><span>Non</span>
+      <label class="switch"><input type="checkbox" id="neufNon"><span class="slider"></span></label>
+    </div>
+  </div>
 
-        <div style="margin-top:10px">
-          <label>Commentaire (optionnel)</label>
+  <div class="status-card status-usite">
+    <div class="status-title">USITÉ</div>
+    <div class="status-row"><span>Oui</span>
+      <label class="switch"><input type="checkbox" id="usiteOui"><span class="slider"></span></label>
+    </div>
+    <div class="status-row"><span>Non</span>
+      <label class="switch"><input type="checkbox" id="usiteNon"><span class="slider"></span></label>
+    </div>
+  </div>
+</div>
+
+<input type="hidden" id="neufSelect" value="non">
+<input type="hidden" id="usiteSelect" value="non">
+
+<label>Commentaire (optionnel)</label>
           <input id="commentInput" placeholder="Ex: HS, retour, etc." />
         </div>
 
@@ -256,21 +304,19 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 
 <script>
-/* =======================
-   Gestion Inventaire PWA
-   - Références : menu déroulant fiable + persistant
-   - Statuts NEUF / USITÉ : style "cartes" + choix exclusif
-   - Émetteur = Magasin (auto-synchronisé)
-   - Export PDF : 2 bons sur 1 A4 (jsPDF)
-   ======================= */
-
+/* --------------------- Storage keys --------------------- */
 const K = {
   refs: "inv_refs_v1",
   mags: "inv_mags_v1",
+  emit: "inv_emit_v1",
   draft: "inv_draft_v1",
   hist: "inv_hist_v1",
   seq: "inv_bon_seq_v1"
 };
+
+const DEFAULT_EMETTEURS = [
+  { code: "ISTGS54", label: "ISTGS54" }
+];
 
 const DEFAULT_MAGS = [
   { code: "ISTGS54", label: "Magasin principal" },
@@ -283,8 +329,10 @@ const DEFAULT_REFS = [
   "SF CO8 11","SJ CO8 12","SJ ?? 12","CZ CO8 12"
 ].filter(Boolean);
 
+/* --------------------- State --------------------- */
 let lines = []; // {ref, qty, neufOui, usiteOui, comment}
 
+/* --------------------- Helpers --------------------- */
 const $ = (id) => document.getElementById(id);
 
 function loadJSON(key, fallback){
@@ -292,35 +340,22 @@ function loadJSON(key, fallback){
     const v = localStorage.getItem(key);
     if(!v) return fallback;
     return JSON.parse(v);
-  }catch(_){
-    return fallback;
-  }
+  }catch(e){ return fallback; }
 }
 function saveJSON(key, value){
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-function pad2(n){ return String(n).padStart(2, "0"); }
 function todayISO(){
   const d = new Date();
-  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
-}
-function ddmmyyyy(iso){
-  if(!iso) return "";
-  const [y,m,d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-}
-function sanitizeRef(s){
-  return (s || "").trim().replace(/\s+/g, " ");
-}
-function escapeHTML(s){
-  return (s || "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+  const pad = (n) => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 }
 
-/* ---------- Numéro de bon unique ---------- */
 function ensureSeq(){
   let seq = Number(localStorage.getItem(K.seq) || "0");
   if(!seq || seq < 1000000){
+    // base unique-ish
     seq = Math.floor((Date.now()/1000) % 9000000) + 1000000;
     localStorage.setItem(K.seq, String(seq));
   }
@@ -329,66 +364,14 @@ function ensureSeq(){
 function nextBonNumber(){
   const seq = ensureSeq() + 1;
   localStorage.setItem(K.seq, String(seq));
-  return String(seq).padStart(7, "0");
+  return String(seq).padStart(7,"0");
 }
 
-/* ---------- UI helpers ---------- */
-function fillSelect(sel, arr){
-  sel.innerHTML = "";
-  arr.forEach(o => {
-    const opt = document.createElement("option");
-    opt.value = o.code;
-    opt.textContent = o.label ? `${o.code} — ${o.label}` : o.code;
-    sel.appendChild(opt);
-  });
+function sanitizeRef(s){
+  return (s || "").trim().replace(/\s+/g," ");
 }
 
-function refreshRefSelect(refs, keepValue){
-  const sel = $("refSelect");
-  const current = keepValue ? sel.value : "";
-  sel.innerHTML =
-    `<option value="" disabled ${current ? "" : "selected"}>Choisir une référence...</option>` +
-    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
-  if(keepValue && current && refs.includes(current)) sel.value = current;
-  else sel.value = "";
-}
-
-function setNeuf(value){
-  const yes = value === "oui";
-  $("neufOui").checked = yes;
-  $("neufNon").checked = !yes;
-  $("neufSelect").value = yes ? "oui" : "non";
-  if(yes) setUsite("non");
-}
-function setUsite(value){
-  const yes = value === "oui";
-  $("usiteOui").checked = yes;
-  $("usiteNon").checked = !yes;
-  $("usiteSelect").value = yes ? "oui" : "non";
-  if(yes) setNeuf("non");
-}
-function initStatus(){
-  // défaut : Non / Non
-  setNeuf("non");
-  setUsite("non");
-
-  // Interrupteurs : on force toujours un état (Oui ou Non)
-  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
-  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
-
-  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
-  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
-}
-
-function resetLineInputs(){
-  $("refSelect").value = "";
-  $("qtyInput").value = "1";
-  $("commentInput").value = "";
-  setNeuf("non");
-  setUsite("non");
-}
-
-/* ---------- Tabs ---------- */
+/* --------------------- Tabs --------------------- */
 document.querySelectorAll(".tab").forEach(t => {
   t.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
@@ -402,37 +385,66 @@ document.querySelectorAll(".tab").forEach(t => {
   });
 });
 
-/* ---------- Init data ---------- */
+/* --------------------- Init selects --------------------- */
+function fillSelect(sel, arr){
+  sel.innerHTML = "";
+  arr.forEach(o => {
+    const opt = document.createElement("option");
+    opt.value = o.code;
+    opt.textContent = o.label ? `${o.code} — ${o.label}` : o.code;
+    sel.appendChild(opt);
+  });
+}
+
 function initData(){
   const refs = loadJSON(K.refs, null) || DEFAULT_REFS;
   const mags = loadJSON(K.mags, null) || DEFAULT_MAGS;
+  const emit = loadJSON(K.emit, null) || DEFAULT_EMETTEURS;
 
   saveJSON(K.refs, refs);
   saveJSON(K.mags, mags);
+  saveJSON(K.emit, emit);
 
-  // Magasin
+  fillSelect($("emetteur"), emit);
   fillSelect($("magasin"), mags);
 
-  // Émetteur = Magasin (même liste, désactivé)
-  fillSelect($("emetteur"), mags);
-  $("emetteur").disabled = true;
+  // Menu déroulant des références
+  const refSel = $("refSelect");
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
 
-  const syncEmitter = () => { $("emetteur").value = $("magasin").value; };
-  $("magasin").addEventListener("change", syncEmitter);
-  syncEmitter();
+  // L’émetteur doit correspondre au magasin
+  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
+  // init: aligne au chargement
+  $("emetteur").value = $("magasin").value;
 
-  // Références
-  refreshRefSelect(refs, false);
+  // Interrupteurs NEUF / USITÉ
+  function setNeuf(v){
+    const yes = (v === "oui");
+    $("neufOui").checked = yes; $("neufNon").checked = !yes;
+    $("neufSelect").value = v;
+    if(yes) setUsite("non");
+  }
+  function setUsite(v){
+    const yes = (v === "oui");
+    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
+    $("usiteSelect").value = v;
+    if(yes) setNeuf("non");
+  }
+  // valeurs par défaut
+  setNeuf("non");
+  setUsite("non");
+  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
+  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
+  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
+  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
 
-  // Date défaut
-  $("date").value = todayISO();
 }
 
-/* ---------- Lines rendering ---------- */
+/* --------------------- Lines rendering --------------------- */
 function renderLines(){
   const tbody = $("lines");
   tbody.innerHTML = "";
-
   lines.forEach((l, idx) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -449,19 +461,22 @@ function renderLines(){
   tbody.querySelectorAll("button[data-del]").forEach(b => {
     b.addEventListener("click", () => {
       const i = Number(b.dataset.del);
-      lines.splice(i, 1);
+      lines.splice(i,1);
       renderLines();
     });
   });
 
   const limit = 10;
-  $("limitHint").textContent =
-    lines.length > limit
-      ? `⚠️ ${lines.length} lignes : le PDF n'affichera que les ${limit} premières (limite du formulaire).`
-      : `Limite PDF : ${limit} lignes (comme sur le bon papier).`;
+  $("limitHint").textContent = lines.length > limit
+    ? `⚠️ ${lines.length} lignes : le PDF n'affichera que les ${limit} premières (limite du formulaire).`
+    : `Limite PDF : ${limit} lignes (comme sur le bon papier).`;
 }
 
-/* ---------- Add line ---------- */
+function escapeHTML(s){
+  return (s || "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+}
+
+/* --------------------- Add line --------------------- */
 $("btnAdd").addEventListener("click", () => {
   const ref = sanitizeRef($("refSelect").value);
   if(!ref){
@@ -476,40 +491,65 @@ $("btnAdd").addEventListener("click", () => {
   lines.push({ ref, qty, neufOui, usiteOui, comment });
   renderLines();
 
-  // Persist the ref if new
+  // auto-save reference if new
   const refs = loadJSON(K.refs, []);
   if(!refs.includes(ref)){
     refs.unshift(ref);
-    saveJSON(K.refs, refs.slice(0, 200));
-    refreshRefSelect(refs, false);
+    saveJSON(K.refs, refs.slice(0,200));
+    // Menu déroulant des références
+  const refSel = $("refSelect");
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+
+  // L’émetteur doit correspondre au magasin
+  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
+  // init: aligne au chargement
+  $("emetteur").value = $("magasin").value;
+
+  // Interrupteurs NEUF / USITÉ
+  function setNeuf(v){
+    const yes = (v === "oui");
+    $("neufOui").checked = yes; $("neufNon").checked = !yes;
+    $("neufSelect").value = v;
+    if(yes) setUsite("non");
+  }
+  function setUsite(v){
+    const yes = (v === "oui");
+    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
+    $("usiteSelect").value = v;
+    if(yes) setNeuf("non");
+  }
+  // valeurs par défaut
+  setNeuf("non");
+  setUsite("non");
+  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
+  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
+  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
+  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
+
   }
 
-  resetLineInputs();
+  $("refSelect").selectedIndex = 0;
+  $("qtyInput").value = "1";
+  $("commentInput").value = "";
+  $("neufSelect").value = "non";
+  $("usiteSelect").value = "non";
 });
 
-$("btnClearLine").addEventListener("click", resetLineInputs);
+$("btnClearLine").addEventListener("click", () => {
+  $("refSelect").selectedIndex = 0;
+  $("qtyInput").value = "1";
+  $("commentInput").value = "";
+  $("neufSelect").value = "non";
+  $("usiteSelect").value = "non";
+  if ($("neufOui")) { $("neufOui").checked = false; $("neufNon").checked = true; }
+  if ($("usiteOui")) { $("usiteOui").checked = false; $("usiteNon").checked = true; }
+});
 
-/* ---------- Draft / new ---------- */
-function collectBon(assignNumber){
-  return {
-    bonNumber: assignNumber ? nextBonNumber() : null,
-    emetteur: $("emetteur").value,
-    magasin: $("magasin").value,
-    destinataire: sanitizeRef($("destinataire").value) || "STOCK CENTRAL",
-    date: $("date").value || todayISO(),
-    observations: $("observations").value || "",
-    lines: lines.slice(0, 10)
-  };
-}
-
-function pushHistory(entry){
-  const hist = loadJSON(K.hist, []);
-  hist.unshift(entry);
-  saveJSON(K.hist, hist.slice(0, 80));
-}
-
+/* --------------------- Draft / new --------------------- */
 $("btnSaveDraft").addEventListener("click", () => {
-  saveJSON(K.draft, collectBon(false));
+  const draft = collectBon(false);
+  saveJSON(K.draft, draft);
   alert("Brouillon enregistré.");
 });
 
@@ -520,18 +560,36 @@ $("btnNew").addEventListener("click", () => {
     $("destinataire").value = "STOCK CENTRAL";
     $("date").value = todayISO();
     renderLines();
-    resetLineInputs();
   }
 });
 
-/* ---------- PDF drawing (jsPDF) ---------- */
+function collectBon(assignNumber){
+  return {
+    bonNumber: assignNumber ? nextBonNumber() : null,
+    emetteur: $("emetteur").value,
+    magasin: $("magasin").value,
+    destinataire: sanitizeRef($("destinataire").value) || "STOCK CENTRAL",
+    date: $("date").value || todayISO(),
+    observations: $("observations").value || "",
+    lines: lines.slice(0, 10) // PDF limit
+  };
+}
+
+function pushHistory(entry){
+  const hist = loadJSON(K.hist, []);
+  hist.unshift(entry);
+  saveJSON(K.hist, hist.slice(0, 80));
+}
+
+/* --------------------- PDF drawing (jsPDF) --------------------- */
 function drawBon(doc, y0, data){
   // A4: 210 x 297 mm. Half: 148.5 mm
   const X = 5;
   const Y = y0 + 5;
   const W = 200;
-  const H = 138.5;
+  const H = 138.5; // leave room inside half A4
 
+  // Outer border
   doc.setDrawColor(0);
   doc.setLineWidth(0.2);
   doc.rect(X, Y, W, H);
@@ -542,7 +600,7 @@ function drawBon(doc, y0, data){
   doc.rect(X, Y, W, headerH, "F");
   doc.rect(X, Y, W, headerH);
 
-  // Logo box (approx eps)
+  // Logo box (approx. "eps")
   doc.setFillColor(180,180,180);
   doc.rect(X+2, Y+3, 26, 14, "F");
   doc.setTextColor(255,255,255);
@@ -595,7 +653,7 @@ function drawBon(doc, y0, data){
   doc.setFont("helvetica","bold");
   doc.text("DATE :", X+110, infoY+10);
   doc.setFont("helvetica","normal");
-  doc.text(ddmmyyyy(data.date), X+122, infoY+10);
+  doc.text(data.date.split("-").reverse().join("/"), X+122, infoY+10);
 
   // Table
   const tableY = infoY + 18;
@@ -604,13 +662,13 @@ function drawBon(doc, y0, data){
   const header2H = 7;
 
   const cRef = 92;
-  const cYN = 9;
+  const cYN = 9; // each Oui/Non column
   const cComm = W - (cRef + 4*cYN);
 
+  // header rectangles
   doc.setFont("helvetica","bold");
   doc.setFontSize(8.5);
-
-  // first header row
+  // first header row (merged cells)
   doc.rect(X, tableY, cRef, header1H);
   doc.rect(X+cRef, tableY, 2*cYN, header1H);
   doc.rect(X+cRef+2*cYN, tableY, 2*cYN, header1H);
@@ -621,13 +679,17 @@ function drawBon(doc, y0, data){
   doc.text("USITÉ", X + cRef + 3*cYN, tableY+5.5, {align:"center"});
   doc.text("COMMENTAIRES", X + cRef + 4*cYN + cComm/2, tableY+5.5, {align:"center"});
 
-  // second header row
+  // second header row (Oui/Non)
   const y2 = tableY + header1H;
+  // ref col blank
   doc.rect(X, y2, cRef, header2H);
+  // NEUF Oui / Non
   doc.rect(X+cRef, y2, cYN, header2H);
   doc.rect(X+cRef+cYN, y2, cYN, header2H);
+  // USITÉ Oui / Non
   doc.rect(X+cRef+2*cYN, y2, cYN, header2H);
   doc.rect(X+cRef+3*cYN, y2, cYN, header2H);
+  // comm
   doc.rect(X+cRef+4*cYN, y2, cComm, header2H);
 
   doc.setFontSize(7.5);
@@ -640,7 +702,6 @@ function drawBon(doc, y0, data){
   const startRowsY = y2 + header2H;
   doc.setFont("helvetica","normal");
   doc.setFontSize(8.5);
-
   const maxRows = 10;
   for(let i=0;i<maxRows;i++){
     const ry = startRowsY + i*rowH;
@@ -655,12 +716,10 @@ function drawBon(doc, y0, data){
     if(l){
       doc.text(l.ref, X+2, ry+5.5);
       const mark = "X";
-
-      // NEUF : si neufOui, X en "Oui" sinon en "Non"
+      // Neuf
       if(l.neufOui) doc.text(mark, X+cRef + cYN/2, ry+5.5, {align:"center"});
       else doc.text(mark, X+cRef + cYN + cYN/2, ry+5.5, {align:"center"});
-
-      // USITÉ : si usiteOui, X en "Oui" sinon en "Non"
+      // Usité
       if(l.usiteOui) doc.text(mark, X+cRef + 2*cYN + cYN/2, ry+5.5, {align:"center"});
       else doc.text(mark, X+cRef + 3*cYN + cYN/2, ry+5.5, {align:"center"});
 
@@ -680,44 +739,48 @@ function drawBon(doc, y0, data){
   doc.setFont("helvetica","normal");
   doc.setFontSize(8.5);
   doc.rect(X, obsBoxY, W, obsBoxH);
-
   const obsText = (data.observations || "").trim();
   if(obsText){
     const wrapped = doc.splitTextToSize(obsText, W-4);
-    doc.text(wrapped.slice(0,5), X+2, obsBoxY+6);
+    doc.text(wrapped.slice(0,5), X+2, obsBoxY+6); // limit lines to keep clean
   }
 }
 
-async function buildPDF(){
+async function buildPDF(twoCopies=true){
   if(!window.jspdf || !window.jspdf.jsPDF){
     alert("Librairie PDF non chargée (jsPDF). Vérifie ta connexion et recharge la page.");
     return null;
   }
-  if(lines.length === 0){
+  const data = collectBon(true);
+  if(data.lines.length === 0){
     alert("Ajoute au moins une référence avant d'exporter.");
     return null;
   }
 
-  const data = collectBon(true);
-
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({orientation:"portrait", unit:"mm", format:"a4"});
+
+  // Draw 2 copies on the same A4
   drawBon(doc, 0, data);
   drawBon(doc, 148.5, data);
 
-  pushHistory({ ...data, createdAt: new Date().toISOString() });
+  // History
+  pushHistory({
+    ...data,
+    createdAt: new Date().toISOString()
+  });
 
   return { doc, bonNumber: data.bonNumber };
 }
 
 $("btnPdf").addEventListener("click", async () => {
-  const res = await buildPDF();
+  const res = await buildPDF(true);
   if(!res) return;
   res.doc.save(`bon_sortie_${res.bonNumber}.pdf`);
 });
 
 $("btnShare").addEventListener("click", async () => {
-  const res = await buildPDF();
+  const res = await buildPDF(true);
   if(!res) return;
 
   const blob = res.doc.output("blob");
@@ -726,26 +789,31 @@ $("btnShare").addEventListener("click", async () => {
   if(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })){
     try{
       await navigator.share({ title: "Bon de sortie / retour", files: [file] });
-    }catch(_){}
+    }catch(e){
+      // user cancelled
+    }
   }else{
+    // fallback: download
     res.doc.save(`bon_sortie_${res.bonNumber}.pdf`);
     alert("Partage non supporté ici : le PDF a été téléchargé (ouvre-le puis partage depuis ton téléphone).");
   }
 });
 
-/* ---------- Historique ---------- */
+/* --------------------- Historique --------------------- */
 function renderHist(){
   const hist = loadJSON(K.hist, []);
   if(hist.length === 0){
     $("histWrap").innerHTML = "Aucun bon exporté pour le moment.";
     return;
   }
-  $("histWrap").innerHTML = hist.map(h => {
+  const rows = hist.map(h => {
+    const dt = (h.date || "").split("-").reverse().join("/");
     return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
-      <div><b>N° ${escapeHTML(h.bonNumber || "")}</b> — ${escapeHTML(h.magasin || "")} → ${escapeHTML(h.destinataire || "")} — ${escapeHTML(ddmmyyyy(h.date || ""))}</div>
-      <div class="hint">${(h.lines||[]).length} ligne(s) — ${escapeHTML((h.createdAt||"").replace("T"," ").slice(0,19))}</div>
+      <div><b>N° ${h.bonNumber}</b> — ${escapeHTML(h.magasin)} → ${escapeHTML(h.destinataire)} — ${dt}</div>
+      <div class="hint">${h.lines.length} ligne(s) — ${escapeHTML((h.createdAt||"").replace("T"," ").slice(0,19))}</div>
     </div>`;
   }).join("");
+  $("histWrap").innerHTML = rows;
 }
 
 $("btnRefreshHist").addEventListener("click", renderHist);
@@ -756,7 +824,7 @@ $("btnClearHist").addEventListener("click", () => {
   }
 });
 
-/* ---------- Références ---------- */
+/* --------------------- Références --------------------- */
 function renderRefs(){
   const refs = loadJSON(K.refs, []);
   const tbody = $("refsTable");
@@ -767,30 +835,62 @@ function renderRefs(){
       <td class="right"><button class="danger small" data-rdel="${idx}">Supprimer</button></td>`;
     tbody.appendChild(tr);
   });
-
   tbody.querySelectorAll("button[data-rdel]").forEach(b => {
     b.addEventListener("click", () => {
       const refs2 = loadJSON(K.refs, []);
-      refs2.splice(Number(b.dataset.rdel), 1);
+      refs2.splice(Number(b.dataset.rdel),1);
       saveJSON(K.refs, refs2);
       renderRefs();
-      refreshRefSelect(refs2, false);
+      // Menu déroulant des références (après ajout/suppression)
+  const refSel2 = $("refSelect");
+  const opts = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs2.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+  refSel2.innerHTML = opts;
     });
   });
 }
-
 $("btnAddRef").addEventListener("click", () => {
   const r = sanitizeRef($("newRef").value);
   if(!r) return;
   const refs = loadJSON(K.refs, []);
   if(!refs.includes(r)) refs.unshift(r);
-  saveJSON(K.refs, refs.slice(0, 200));
+  saveJSON(K.refs, refs.slice(0,200));
   $("newRef").value = "";
   renderRefs();
-  refreshRefSelect(refs, true);
+  // Menu déroulant des références
+  const refSel = $("refSelect");
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+
+  // L’émetteur doit correspondre au magasin
+  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
+  // init: aligne au chargement
+  $("emetteur").value = $("magasin").value;
+
+  // Interrupteurs NEUF / USITÉ
+  function setNeuf(v){
+    const yes = (v === "oui");
+    $("neufOui").checked = yes; $("neufNon").checked = !yes;
+    $("neufSelect").value = v;
+    if(yes) setUsite("non");
+  }
+  function setUsite(v){
+    const yes = (v === "oui");
+    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
+    $("usiteSelect").value = v;
+    if(yes) setNeuf("non");
+  }
+  // valeurs par défaut
+  setNeuf("non");
+  setUsite("non");
+  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
+  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
+  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
+  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
+
 });
 
-/* ---------- Magasins ---------- */
+/* --------------------- Magasins --------------------- */
 function renderMags(){
   const mags = loadJSON(K.mags, []);
   const tbody = $("magTable");
@@ -802,26 +902,20 @@ function renderMags(){
       <td class="right"><button class="danger small" data-mdel="${idx}">Supprimer</button></td>`;
     tbody.appendChild(tr);
   });
-
   tbody.querySelectorAll("button[data-mdel]").forEach(b => {
     b.addEventListener("click", () => {
       const mags2 = loadJSON(K.mags, []);
-      mags2.splice(Number(b.dataset.mdel), 1);
+      mags2.splice(Number(b.dataset.mdel),1);
       saveJSON(K.mags, mags2);
       fillSelect($("magasin"), mags2);
-      fillSelect($("emetteur"), mags2);
-      // resync
-      $("emetteur").value = $("magasin").value;
       renderMags();
     });
   });
 }
-
 $("btnAddMag").addEventListener("click", () => {
   const code = sanitizeRef($("newMagCode").value).toUpperCase();
   const label = sanitizeRef($("newMagLabel").value);
   if(!code) return;
-
   const mags = loadJSON(K.mags, []);
   if(mags.some(m => m.code === code)){
     alert("Ce code magasin existe déjà.");
@@ -830,38 +924,36 @@ $("btnAddMag").addEventListener("click", () => {
   mags.unshift({ code, label });
   saveJSON(K.mags, mags);
   fillSelect($("magasin"), mags);
-  fillSelect($("emetteur"), mags);
-  $("emetteur").value = $("magasin").value;
-
   $("newMagCode").value = "";
   $("newMagLabel").value = "";
   renderMags();
 });
 
-/* ---------- Service Worker ---------- */
+/* --------------------- Service Worker --------------------- */
 if("serviceWorker" in navigator){
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("sw.js").catch(()=>{});
   });
 }
 
-/* ---------- Boot ---------- */
+/* --------------------- Boot --------------------- */
 initData();
-initStatus();
-renderLines();
+$("date").value = todayISO();
 
 // restore draft if exists
 const draft = loadJSON(K.draft, null);
 if(draft){
   try{
+    $("emetteur").value = draft.emetteur || $("emetteur").value;
     $("magasin").value = draft.magasin || $("magasin").value;
-    $("emetteur").value = $("magasin").value;
     $("destinataire").value = draft.destinataire || "STOCK CENTRAL";
     $("date").value = draft.date || todayISO();
     $("observations").value = draft.observations || "";
     lines = Array.isArray(draft.lines) ? draft.lines : [];
     renderLines();
-  }catch(_){}
+  }catch(e){}
+}else{
+  renderLines();
 }
 </script>
 </body>
