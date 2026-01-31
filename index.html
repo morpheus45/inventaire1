@@ -956,5 +956,40 @@ if(draft){
   renderLines();
 }
 </script>
+
+<script>
+/* --- IA hook (non-invasif) ---
+   Reçoit une référence validée par l'IA (single ou lot) et l'ajoute via le flux manuel existant.
+   Objectif : NE RIEN CHANGER à la logique d'origine, juste "piloter" le formulaire.
+*/
+window.addReferenceFromAI = (ref, meta) => {
+  try {
+    const refSel = document.getElementById("refSelect");
+    const qty = document.getElementById("qtyInput");
+    const btn = document.getElementById("btnAdd");
+    if (!refSel || !qty || !btn) return;
+
+    // Si la ref n'existe pas dans le select, on l'ajoute (sans toucher aux sauvegardes: le code d'origine gère ça)
+    const exists = Array.from(refSel.options).some(o => o.value === ref);
+    if (!exists) {
+      const opt = document.createElement("option");
+      opt.value = ref;
+      opt.textContent = ref;
+      refSel.insertBefore(opt, refSel.options[1] || null);
+    }
+
+    // Set values like manual
+    refSel.value = ref;
+    qty.value = "1";
+
+    // Ajout via le bouton d'origine (garde toutes les règles existantes)
+    btn.click();
+  } catch (e) {
+    console.warn("IA hook error", e);
+  }
+};
+</script>
+
+<script src="ai/ai.js"></script>
 </body>
 </html>

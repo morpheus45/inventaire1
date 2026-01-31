@@ -57,3 +57,5 @@ self.addEventListener("fetch", (event) => {
   // Cross-origin: just go to network
   event.respondWith(fetch(req));
 });
+
+// AI add-on file
