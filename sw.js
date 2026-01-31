@@ -1,10 +1,12 @@
-const CACHE_NAME = "inventaire-pwa-v4-ui1";
+// Bump version whenever files change to force PWA update
+const CACHE_NAME = "inventaire-pwa-v5-ai1";
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./icon-192.png",
-  "./icon-512.png"
+  "./icon-512.png",
+  "./ai/ai.js"
 ];
 
 // Install: pre-cache core assets
@@ -57,5 +59,3 @@ self.addEventListener("fetch", (event) => {
   // Cross-origin: just go to network
   event.respondWith(fetch(req));
 });
-
-// AI add-on file

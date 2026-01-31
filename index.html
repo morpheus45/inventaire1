@@ -110,6 +110,15 @@
 .switch input:checked + .slider{ background:#2563eb; }
 .switch input:checked + .slider:before{ transform:translateX(20px); }
 
+/* IA thumbs in Références */
+.ref-thumb{
+  width:52px;height:52px;
+  border-radius:12px;
+  object-fit:cover;
+  border:1px solid #e5e7eb;
+  background:#f3f4f6;
+}
+
 </style>
 </head>
 <body>
@@ -265,6 +274,12 @@
         </div>
       </div>
       <div class="hint" style="margin-top:6px">Les références sont enregistrées localement (sur cet appareil).</div>
+
+      <!-- IA : accès rapide (si le module IA est présent) -->
+      <div class="btns" id="iaRefsBtns" style="margin-top:10px; display:none">
+        <button class="ghost" id="btnIAOpenScan">🤖 IA photo (détection)</button>
+        <button class="ghost" id="btnIAOpenBase">📚 Base IA (photos par ref)</button>
+      </div>
       <div style="margin-top:12px">
         <table>
           <thead><tr><th>Référence</th><th></th></tr></thead>
@@ -825,16 +840,52 @@ $("btnClearHist").addEventListener("click", () => {
 });
 
 /* --------------------- Références --------------------- */
-function renderRefs(){
+async function renderRefs(){
   const refs = loadJSON(K.refs, []);
   const tbody = $("refsTable");
   tbody.innerHTML = "";
+
+  // IA present? Show quick access buttons in this tab
+  const iaOk = !!(window.AIRefAddon && typeof window.AIRefAddon.openScan === "function");
+  const iaBtns = $("iaRefsBtns");
+  if (iaBtns) iaBtns.style.display = iaOk ? "flex" : "none";
+  if (iaOk) {
+    $("btnIAOpenScan").onclick = () => window.AIRefAddon.openScan();
+    $("btnIAOpenBase").onclick = () => window.AIRefAddon.openBase();
+  }
+
+  // Pull thumbs/counts from IA photo base (if available)
+  let summary = {};
+  if (window.AIRefAddon && typeof window.AIRefAddon.getRefSummary === "function") {
+    try { summary = await window.AIRefAddon.getRefSummary(); } catch { summary = {}; }
+  }
+
   refs.forEach((r, idx) => {
+    const sum = summary[r] || { count: 0, thumb: null };
+    const thumb = sum.thumb
+      ? `<img class="ref-thumb" src="${sum.thumb}" alt="photo IA" />`
+      : `<span class="hint" style="white-space:nowrap">Aucune photo IA</span>`;
+    const countHint = `<div class="hint" style="margin-top:2px">${sum.count || 0} photo(s) IA</div>`;
+
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${escapeHTML(r)}</td>
-      <td class="right"><button class="danger small" data-rdel="${idx}">Supprimer</button></td>`;
+    tr.innerHTML = `
+      <td>
+        <div class="row" style="align-items:center; gap:10px">
+          <div style="flex:1; min-width:0">
+            <div><b>${escapeHTML(r)}</b></div>
+            ${countHint}
+          </div>
+          <div class="right" style="min-width:70px">${thumb}</div>
+        </div>
+      </td>
+      <td class="right">
+        <button class="ghost small" data-iaref="${idx}" ${iaOk ? "" : "disabled"}>📷 IA</button>
+        <button class="danger small" data-rdel="${idx}">Supprimer</button>
+      </td>`;
     tbody.appendChild(tr);
   });
+
+  // Delete ref
   tbody.querySelectorAll("button[data-rdel]").forEach(b => {
     b.addEventListener("click", () => {
       const refs2 = loadJSON(K.refs, []);
@@ -842,10 +893,19 @@ function renderRefs(){
       saveJSON(K.refs, refs2);
       renderRefs();
       // Menu déroulant des références (après ajout/suppression)
-  const refSel2 = $("refSelect");
-  const opts = `<option value="" disabled selected>Choisir une référence...</option>` +
-    refs2.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
-  refSel2.innerHTML = opts;
+      const refSel2 = $("refSelect");
+      const opts = `<option value="" disabled selected>Choisir une référence...</option>` +
+        refs2.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+      refSel2.innerHTML = opts;
+    });
+  });
+
+  // Open IA base on a specific reference
+  tbody.querySelectorAll("button[data-iaref]").forEach(b => {
+    b.addEventListener("click", () => {
+      if (!window.AIRefAddon || typeof window.AIRefAddon.openBase !== "function") return;
+      const ref = refs[Number(b.dataset.iaref)];
+      window.AIRefAddon.openBase(ref);
     });
   });
 }
@@ -957,39 +1017,22 @@ if(draft){
 }
 </script>
 
+<!-- IA Photo (optionnel) : module autonome, n'impacte pas le fonctionnement manuel -->
 <script>
-/* --- IA hook (non-invasif) ---
-   Reçoit une référence validée par l'IA (single ou lot) et l'ajoute via le flux manuel existant.
-   Objectif : NE RIEN CHANGER à la logique d'origine, juste "piloter" le formulaire.
-*/
-window.addReferenceFromAI = (ref, meta) => {
-  try {
-    const refSel = document.getElementById("refSelect");
-    const qty = document.getElementById("qtyInput");
-    const btn = document.getElementById("btnAdd");
-    if (!refSel || !qty || !btn) return;
-
-    // Si la ref n'existe pas dans le select, on l'ajoute (sans toucher aux sauvegardes: le code d'origine gère ça)
-    const exists = Array.from(refSel.options).some(o => o.value === ref);
-    if (!exists) {
-      const opt = document.createElement("option");
-      opt.value = ref;
-      opt.textContent = ref;
-      refSel.insertBefore(opt, refSel.options[1] || null);
-    }
-
-    // Set values like manual
-    refSel.value = ref;
-    qty.value = "1";
-
-    // Ajout via le bouton d'origine (garde toutes les règles existantes)
-    btn.click();
-  } catch (e) {
-    console.warn("IA hook error", e);
-  }
-};
+  window.AI_REF_ADDON_CONFIG = {
+    // Si vide, le module IA récupère la liste dans l'onglet Références
+    refs: [],
+    // Seuils de confiance : au-dessus -> auto ; sinon -> demande validation
+    threshold_auto: 0.78,
+    threshold_min: 0.55,
+    // Nombre max d'objets à traiter (photo de lot)
+    max_objects: 20,
+    // Stockage
+    db_name: "inventaire_ai_ref_db",
+    // Debug (console)
+    debug: false
+  };
 </script>
-
-<script src="ai/ai.js"></script>
+<script src="./ai/ai.js"></script>
 </body>
 </html>
