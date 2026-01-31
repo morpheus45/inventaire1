@@ -474,7 +474,7 @@ function renderLines(){
   });
 
   tbody.querySelectorAll("button[data-del]").forEach(b => {
-    b.addEventListener("click", () => {
+    b.addEventListener("click", async () => {
       const i = Number(b.dataset.del);
       lines.splice(i,1);
       renderLines();
@@ -850,8 +850,8 @@ async function renderRefs(){
   const iaBtns = $("iaRefsBtns");
   if (iaBtns) iaBtns.style.display = iaOk ? "flex" : "none";
   if (iaOk) {
-    $("btnIAOpenScan").onclick = () => window.AIRefAddon.openScan();
-    $("btnIAOpenBase").onclick = () => window.AIRefAddon.openBase();
+    $("btnIAOpenScan").onclick = () => { if(!ensureAI()) return; window.AIRefAddon.openScan(); };
+    $("btnIAOpenBase").onclick = () => { if(!ensureAI()) return; window.AIRefAddon.openBase(); };
   }
 
   // Pull thumbs/counts from IA photo base (if available)
@@ -875,11 +875,11 @@ async function renderRefs(){
             <div><b>${escapeHTML(r)}</b></div>
             ${countHint}
           </div>
-          <div class="right" style="min-width:70px">${thumb}</div>
+          <div class="right aiThumbs" data-idx="${idx}" style="min-width:70px">${thumb}</div>
         </div>
       </td>
       <td class="right">
-        <button class="ghost small" data-iaref="${idx}" ${iaOk ? "" : "disabled"}>📷 IA</button>
+        <button class="ghost small" data-iaref="${idx}">📷 IA</button>
         <button class="danger small" data-rdel="${idx}">Supprimer</button>
       </td>`;
     tbody.appendChild(tr);
@@ -887,7 +887,7 @@ async function renderRefs(){
 
   // Delete ref
   tbody.querySelectorAll("button[data-rdel]").forEach(b => {
-    b.addEventListener("click", () => {
+    b.addEventListener("click", async () => {
       const refs2 = loadJSON(K.refs, []);
       refs2.splice(Number(b.dataset.rdel),1);
       saveJSON(K.refs, refs2);
@@ -902,12 +902,21 @@ async function renderRefs(){
 
   // Open IA base on a specific reference
   tbody.querySelectorAll("button[data-iaref]").forEach(b => {
-    b.addEventListener("click", () => {
-      if (!window.AIRefAddon || typeof window.AIRefAddon.openBase !== "function") return;
+    b.addEventListener("click", async () => {
+      if (!ensureAI() || typeof window.AIRefAddon.addPhotoForRef !== "function") { return; }
       const ref = refs[Number(b.dataset.iaref)];
-      window.AIRefAddon.openBase(ref);
+      await window.AIRefAddon.addPhotoForRef(ref);
+      await renderRefs();
+});
+  });
+  // Click on thumbnails/count to manage photos for this reference
+  tbody.querySelectorAll(".aiThumbs").forEach(d => {
+    d.addEventListener("click", () => {
+      const ref = refs[Number(d.dataset.idx)];
+      openBase(ref);
     });
   });
+
 }
 $("btnAddRef").addEventListener("click", () => {
   const r = sanitizeRef($("newRef").value);
@@ -963,7 +972,7 @@ function renderMags(){
     tbody.appendChild(tr);
   });
   tbody.querySelectorAll("button[data-mdel]").forEach(b => {
-    b.addEventListener("click", () => {
+    b.addEventListener("click", async () => {
       const mags2 = loadJSON(K.mags, []);
       mags2.splice(Number(b.dataset.mdel),1);
       saveJSON(K.mags, mags2);
@@ -1033,6 +1042,984 @@ if(draft){
     debug: false
   };
 </script>
-<script src="./ai/ai.js"></script>
+<script src="./ai.js"></script>
+
+<!-- AI addon (inlined to avoid GitHub Pages 404/cache issues) -->
+<script>
+/*!
+ * PWA AI Add-on (human-in-the-loop + multi-obj)
+ * - Keeps your manual app intact; adds floating buttons + modals.
+ * - Single photo (1 objet) OR Lot photo (multi objets) -> propose refs -> you validate when unsure -> counts + learns.
+ * - Uses TFJS + MobileNet embeddings (CDN) + nearest-neighbor matching (cosine).
+ * - Stores learning samples locally in IndexedDB (separate from your existing app data).
+ *
+ * Integration (zero-impact):
+ *   Define window.addReferenceFromAI = (ref, meta) => { call your existing add/increment logic }
+ * Or listen:
+ *   window.addEventListener("ai-ref-confirmed", (e) => ...)
+ */
+(function () {
+  "use strict";
+
+  const CONFIG = {
+    tfjsSrc: "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js",
+    mobilenetSrc: "https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js",
+    ui: { fabRight: 16, fabBottom: 16 },
+    db: { name: "ai_ref_db_v2", store: "samples" },
+    match: {
+      topK: 3,
+      autoAcceptThreshold: 0.92,
+      margin: 0.06,
+      doubtThreshold: 0.80, // below => always ask
+    },
+    embedding: { endpoint: "conv_preds", size: 224 },
+    multi: {
+      maxSide: 1280,
+      // background segmentation parameters
+      bgDelta: 18,
+      minAreaRatio: 0.010, // min blob area = 1% of image
+      maxAreaRatio: 0.65,
+      padRatio: 0.08,
+      morphRadius: 2,
+    }
+  };
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+
+  function cosineSimilarity(a, b) {
+    let dot = 0, na = 0, nb = 0;
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+      const x = a[i], y = b[i];
+      dot += x * y; na += x * x; nb += y * y;
+    }
+    if (na === 0 || nb === 0) return 0;
+    return dot / (Math.sqrt(na) * Math.sqrt(nb));
+  }
+  function toFloat32Array(arr) { return (arr instanceof Float32Array) ? arr : new Float32Array(arr); }
+  function fmtScore(s) { return (Math.round(s * 1000) / 10).toFixed(1) + "%"; }
+  function safeText(s) { return String(s ?? "").replace(/[<>]/g, ""); }
+
+  // ----- IndexedDB -----
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(CONFIG.db.name, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(CONFIG.db.store)) {
+          const store = db.createObjectStore(CONFIG.db.store, { keyPath: "id", autoIncrement: true });
+          store.createIndex("ref", "ref", { unique: false });
+          store.createIndex("createdAt", "createdAt", { unique: false });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function dbPut(sample) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CONFIG.db.store, "readwrite");
+      tx.objectStore(CONFIG.db.store).add(sample).onsuccess = (e) => resolve(e.target.result);
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => db.close();
+    });
+  }
+  async function dbGetAll() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CONFIG.db.store, "readonly");
+      const req = tx.objectStore(CONFIG.db.store).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+      tx.oncomplete = () => db.close();
+    });
+  }
+  async function dbDelete(id) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CONFIG.db.store, "readwrite");
+      tx.objectStore(CONFIG.db.store).delete(id).onsuccess = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => db.close();
+    });
+  }
+
+  // ----- TFJS/MobileNet -----
+  let _tfLoaded = false, _mnLoaded = false, _mn = null;
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[data-ai-src="${src}"]`)) return resolve();
+      const s = document.createElement("script");
+      s.src = src; s.async = true; s.defer = true; s.dataset.aiSrc = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("Failed to load " + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function ensureModel() {
+    if (!_tfLoaded) { await loadScript(CONFIG.tfjsSrc); _tfLoaded = true; }
+    if (!_mnLoaded) { await loadScript(CONFIG.mobilenetSrc); _mnLoaded = true; }
+    if (!_mn) { _mn = await window.mobilenet.load({ version: 2, alpha: 1.0 }); }
+    return _mn;
+  }
+
+  function makeCanvas(w, h) {
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    return c;
+  }
+
+  async function imageToEmbedding(imgEl) {
+    const mn = await ensureModel();
+    const tf = window.tf;
+
+    const canvas = makeCanvas(CONFIG.embedding.size, CONFIG.embedding.size);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    const w = imgEl.naturalWidth || imgEl.width;
+    const h = imgEl.naturalHeight || imgEl.height;
+    const side = Math.min(w, h);
+    const sx = Math.floor((w - side) / 2);
+    const sy = Math.floor((h - side) / 2);
+
+    ctx.drawImage(imgEl, sx, sy, side, side, 0, 0, canvas.width, canvas.height);
+
+    const input = tf.tidy(() => tf.browser.fromPixels(canvas).toFloat().div(255).expandDims(0));
+    let emb;
+    try {
+      const act = mn.infer(input, CONFIG.embedding.endpoint);
+      const arr = await act.data();
+      emb = toFloat32Array(arr);
+      act.dispose?.();
+    } finally {
+      input.dispose?.();
+    }
+    return emb;
+  }
+
+  async function blobToImage(blob) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+      img.src = url;
+    });
+  }
+
+  async function fileToThumbDataURL(file, maxSide = 320) {
+    const img = await blobToImage(file);
+    const w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, maxSide / Math.max(w, h));
+    const cw = Math.round(w * scale), ch = Math.round(h * scale);
+    const c = makeCanvas(cw, ch);
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0, cw, ch);
+    return c.toDataURL("image/jpeg", 0.82);
+  }
+
+  async function matchEmbedding(queryEmb) {
+    const all = await dbGetAll();
+    if (!all.length) return { all, top: [] };
+
+    const scored = all.map(s => ({ sample: s, score: cosineSimilarity(queryEmb, toFloat32Array(s.embedding)) }));
+    const bestByRef = new Map();
+    for (const x of scored) {
+      const ref = x.sample.ref;
+      const prev = bestByRef.get(ref);
+      if (!prev || x.score > prev.score) bestByRef.set(ref, x);
+    }
+    const unique = Array.from(bestByRef.values()).sort((a, b) => b.score - a.score);
+    return { all, top: unique.slice(0, CONFIG.match.topK) };
+  }
+
+  // ----- UI -----
+  function injectStyles() {
+    if ($("#ai-addon-style")) return;
+    const s = document.createElement("style");
+    s.id = "ai-addon-style";
+    s.textContent = `
+      .ai-fab-wrap{position:fixed;right:${CONFIG.ui.fabRight}px;bottom:${CONFIG.ui.fabBottom}px;z-index:99999;display:flex;flex-direction:column;gap:10px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
+      .ai-fab{border:none;border-radius:999px;padding:12px 14px;box-shadow:0 8px 20px rgba(0,0,0,.22);background:#111827;color:#fff;font-weight:800;font-size:14px;display:flex;align-items:center;gap:8px;cursor:pointer}
+      .ai-fab.secondary{background:#374151}
+      .ai-modal{position:fixed;inset:0;z-index:999999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);padding:16px}
+      .ai-card{width:min(920px,100%);background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden}
+      .ai-card header{padding:14px 16px;background:#f3f4f6;display:flex;align-items:center;justify-content:space-between}
+      .ai-card header h3{margin:0;font-size:16px}
+      .ai-card header button{border:none;background:transparent;font-size:22px;cursor:pointer;line-height:1}
+      .ai-card .body{padding:16px;display:grid;grid-template-columns:1fr;gap:14px}
+      @media(min-width:920px){.ai-card .body{grid-template-columns:320px 1fr}}
+      .ai-thumb{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;background:#e5e7eb}
+      .ai-actions{display:flex;flex-direction:column;gap:10px}
+      .ai-btn{border:1px solid #e5e7eb;background:#111827;color:#fff;border-radius:12px;padding:10px 12px;font-weight:800;cursor:pointer;text-align:left}
+      .ai-btn.ghost{background:#fff;color:#111827}
+      .ai-btn.small{padding:8px 10px;border-radius:10px;font-weight:800}
+      .ai-row{display:flex;gap:10px;flex-wrap:wrap}
+      .ai-input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:12px;font-size:14px}
+      .ai-muted{color:#6b7280;font-size:13px}
+      .ai-list{max-height:420px;overflow:auto;border:1px solid #e5e7eb;border-radius:12px}
+      .ai-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e5e7eb;gap:10px}
+      .ai-item:last-child{border-bottom:none}
+      .ai-badge{font-size:12px;background:#eef2ff;color:#3730a3;border-radius:999px;padding:2px 8px;font-weight:800}
+      .ai-danger{background:#fee2e2;color:#991b1b}
+      .ai-ok{background:#dcfce7;color:#166534}
+      .ai-spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(0,0,0,.2);border-top-color:rgba(0,0,0,.6);border-radius:50%;animation:ai-spin 0.8s linear infinite}
+      @keyframes ai-spin{to{transform:rotate(360deg)}}
+      .ai-kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;background:#f3f4f6;border-radius:8px;padding:2px 6px;font-size:12px}
+      .ai-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+      @media(min-width:720px){.ai-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
+      .ai-tile{border:1px solid #e5e7eb;border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:8px}
+      .ai-tile img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:10px;background:#e5e7eb}
+      .ai-select{width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:10px}
+      .ai-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;border-radius:999px;padding:3px 10px;background:#f3f4f6}
+    `;
+    document.head.appendChild(s);
+  }
+
+  function injectUI() {
+    injectStyles();
+    if ($("#ai-fab-wrap")) return;
+
+    const wrap = document.createElement("div");
+    wrap.id = "ai-fab-wrap";
+    wrap.className = "ai-fab-wrap";
+
+    const btnAI = document.createElement("button");
+    btnAI.className = "ai-fab";
+    btnAI.type = "button";
+    btnAI.textContent = "🤖 IA photo";
+    btnAI.addEventListener("click", () => openScanModal());
+
+    const btnBase = document.createElement("button");
+    btnBase.className = "ai-fab secondary";
+    btnBase.type = "button";
+    btnBase.textContent = "📚 Base IA";
+    btnBase.addEventListener("click", () => openBaseModal());
+
+    wrap.appendChild(btnAI);
+    wrap.appendChild(btnBase);
+    document.body.appendChild(wrap);
+
+    const modal = document.createElement("div");
+    modal.id = "ai-modal";
+    modal.className = "ai-modal";
+    modal.innerHTML = `
+      <div class="ai-card" role="dialog" aria-modal="true" aria-label="IA">
+        <header>
+          <h3 id="ai-modal-title">IA</h3>
+          <button type="button" id="ai-close" aria-label="Fermer">×</button>
+        </header>
+        <div class="body" id="ai-modal-body"></div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    $("#ai-close").addEventListener("click", closeModal);
+    modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+
+    // inputs
+    const inputSingle = document.createElement("input");
+    inputSingle.id = "ai-file-single";
+    inputSingle.type = "file";
+    inputSingle.accept = "image/*";
+    inputSingle.capture = "environment";
+    inputSingle.style.display = "none";
+    inputSingle.addEventListener("change", async () => {
+      const file = inputSingle.files?.[0];
+      inputSingle.value = "";
+      if (!file) return;
+      await handleSingle(file);
+    });
+    document.body.appendChild(inputSingle);
+
+    const inputLot = document.createElement("input");
+    inputLot.id = "ai-file-lot";
+    inputLot.type = "file";
+    inputLot.accept = "image/*";
+    inputLot.capture = "environment";
+    inputLot.style.display = "none";
+    inputLot.addEventListener("change", async () => {
+      const file = inputLot.files?.[0];
+      inputLot.value = "";
+      if (!file) return;
+      await handleLot(file);
+    });
+    document.body.appendChild(inputLot);
+  }
+
+  function openModal(title, bodyHTML) {
+    $("#ai-modal-title").textContent = title;
+    $("#ai-modal-body").innerHTML = bodyHTML;
+    $("#ai-modal").style.display = "flex";
+  }
+  function closeModal() { $("#ai-modal").style.display = "none"; }
+
+  function toast(msg) {
+    const t = document.createElement("div");
+    t.textContent = msg;
+    Object.assign(t.style, {
+      position: "fixed", left: "50%", bottom: "90px", transform: "translateX(-50%)",
+      background: "rgba(17,24,39,.92)", color: "#fff", padding: "10px 12px",
+      borderRadius: "999px", boxShadow: "0 8px 22px rgba(0,0,0,.28)", zIndex: "999999",
+      fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif"
+    });
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2200);
+  }
+
+  // ----- Scan modal -----
+  function openScanModal() {
+    openModal("IA photo", `
+      <div>
+        <img id="ai-preview" class="ai-thumb" alt="Aperçu"/>
+        <div class="ai-muted" style="margin-top:10px">
+          <b>1 objet</b> : rapide. <b>Lot</b> : détecte plusieurs objets puis compte par référence. <br>
+          Si doute, l’IA te demandera de choisir.
+        </div>
+        <div class="ai-row" style="margin-top:10px">
+          <button class="ai-btn" id="ai-take-single">📷 1 objet</button>
+          <button class="ai-btn ghost" id="ai-take-lot">📸 Lot (multi)</button>
+        </div>
+        <div class="ai-muted" style="margin-top:8px" id="ai-status"></div>
+      </div>
+      <div class="ai-actions" id="ai-right">
+        <div class="ai-muted">Aucune photo encore.</div>
+      </div>
+    `);
+
+    $("#ai-take-single").addEventListener("click", () => $("#ai-file-single").click());
+    $("#ai-take-lot").addEventListener("click", () => $("#ai-file-lot").click());
+  }
+
+  // ----- Single flow -----
+  async function handleSingle(file) {
+    $("#ai-status").innerHTML = `<span class="ai-spinner"></span> Analyse…`;
+    const preview = $("#ai-preview");
+    const url = URL.createObjectURL(file);
+    preview.src = url;
+
+    try {
+      await ensureModel();
+      const img = await blobToImage(file);
+      const emb = await imageToEmbedding(img);
+
+      const { top } = await matchEmbedding(emb);
+      const right = $("#ai-right");
+
+      if (!top.length) {
+        right.innerHTML = `
+          <div class="ai-muted">Base IA vide. Ajoute une référence :</div>
+          <input class="ai-input" id="ai-new-ref" placeholder="Référence (ex: IR-CO8-71)" />
+          <button class="ai-btn" id="ai-save-first">✅ Enregistrer + compter</button>
+        `;
+        $("#ai-save-first").addEventListener("click", async () => {
+          const ref = safeText($("#ai-new-ref").value).trim();
+          if (!ref) return toast("Entre une référence.");
+          await saveSample(ref, file, emb);
+          toast("Ajouté + compté.");
+          emitConfirmed(ref, { score: 1, method: "first_sample_single" });
+        });
+      } else {
+        const best = top[0];
+        const second = top[1];
+        const autoOk = best.score >= CONFIG.match.autoAcceptThreshold && (!second || (best.score - second.score) >= CONFIG.match.margin);
+        const doubt = best.score < CONFIG.match.doubtThreshold;
+
+        right.innerHTML = `
+          <div class="ai-muted">Propositions :</div>
+          ${top.map((x, idx) => `
+            <button class="ai-btn ${idx===0 ? "" : "ghost"}" data-ref="${safeText(x.sample.ref)}" data-score="${x.score}">
+              ${safeText(x.sample.ref)} <span class="ai-badge">${fmtScore(x.score)}</span>
+            </button>
+          `).join("")}
+          <button class="ai-btn ghost" id="ai-other">➕ Autre / Nouvelle ref</button>
+          <div class="ai-muted" style="margin-top:6px">Valider = compter + apprendre.</div>
+        `;
+
+        right.querySelectorAll("button[data-ref]").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const ref = btn.getAttribute("data-ref");
+            const score = parseFloat(btn.getAttribute("data-score"));
+            await saveSample(ref, file, emb);
+            toast(`Validé : ${ref}`);
+            emitConfirmed(ref, { score, method: "validated_single" });
+          });
+        });
+
+        $("#ai-other").addEventListener("click", () => {
+          right.innerHTML = `
+            <div class="ai-muted">Nouvelle référence :</div>
+            <input class="ai-input" id="ai-new-ref2" placeholder="Référence (ex: IR-CO8-72)" />
+            <button class="ai-btn" id="ai-save-new">✅ Enregistrer + compter</button>
+          `;
+          $("#ai-save-new").addEventListener("click", async () => {
+            const ref = safeText($("#ai-new-ref2").value).trim();
+            if (!ref) return toast("Entre une référence.");
+            await saveSample(ref, file, emb);
+            toast(`Ajouté : ${ref}`);
+            emitConfirmed(ref, { score: 1, method: "new_ref_single" });
+          });
+        });
+
+        // Auto-accept only if confident AND not doubtful
+        if (autoOk && !doubt) {
+          await saveSample(best.sample.ref, file, emb);
+          toast(`Auto : ${best.sample.ref} (${fmtScore(best.score)})`);
+          emitConfirmed(best.sample.ref, { score: best.score, method: "auto_single" });
+        } else {
+          // Explicitly tell user there is doubt
+          if (doubt) $("#ai-status").textContent = "Doute : choisis la bonne référence (ou ajoute une nouvelle).";
+          else $("#ai-status").textContent = "Choisis/valide une référence.";
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      $("#ai-status").textContent = "Erreur IA : " + (e?.message || e);
+      toast("Erreur IA.");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  // ----- Multi-object detection (heuristic) -----
+  function resizeToMaxSide(img, maxSide) {
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    const scale = Math.min(1, maxSide / Math.max(w, h));
+    const cw = Math.round(w * scale), ch = Math.round(h * scale);
+    const c = makeCanvas(cw, ch);
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, cw, ch);
+    return { canvas: c, scale, w: cw, h: ch };
+  }
+
+  function estimateBackgroundGray(data, w, h) {
+    // sample border pixels
+    let sum = 0, cnt = 0;
+    const step = Math.max(1, Math.floor(Math.min(w,h) / 120));
+    function grayAt(i){ return (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114); }
+    for (let x=0; x<w; x+=step) {
+      let i1 = (0*w + x)*4;
+      let i2 = ((h-1)*w + x)*4;
+      sum += grayAt(i1) + grayAt(i2); cnt += 2;
+    }
+    for (let y=0; y<h; y+=step) {
+      let i1 = (y*w + 0)*4;
+      let i2 = (y*w + (w-1))*4;
+      sum += grayAt(i1) + grayAt(i2); cnt += 2;
+    }
+    return cnt ? (sum / cnt) : 255;
+  }
+
+  function morphDilate(mask, w, h, r) {
+    const out = new Uint8Array(mask.length);
+    for (let y=0; y<h; y++) {
+      for (let x=0; x<w; x++) {
+        let on = 0;
+        for (let dy=-r; dy<=r && !on; dy++) {
+          const yy = y+dy; if (yy<0||yy>=h) continue;
+          for (let dx=-r; dx<=r; dx++) {
+            const xx = x+dx; if (xx<0||xx>=w) continue;
+            if (mask[yy*w+xx]) { on = 1; break; }
+          }
+        }
+        out[y*w+x] = on;
+      }
+    }
+    return out;
+  }
+
+  function morphErode(mask, w, h, r) {
+    const out = new Uint8Array(mask.length);
+    for (let y=0; y<h; y++) {
+      for (let x=0; x<w; x++) {
+        let on = 1;
+        for (let dy=-r; dy<=r && on; dy++) {
+          const yy = y+dy; if (yy<0||yy>=h) { on=0; break; }
+          for (let dx=-r; dx<=r; dx++) {
+            const xx = x+dx; if (xx<0||xx>=w) { on=0; break; }
+            if (!mask[yy*w+xx]) { on = 0; break; }
+          }
+        }
+        out[y*w+x] = on;
+      }
+    }
+    return out;
+  }
+
+  function connectedComponents(mask, w, h) {
+    const visited = new Uint8Array(mask.length);
+    const boxes = [];
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    for (let i=0;i<mask.length;i++){
+      if (!mask[i] || visited[i]) continue;
+      visited[i]=1;
+      const q=[i];
+      let minx=w, miny=h, maxx=0, maxy=0, area=0;
+      while(q.length){
+        const p=q.pop();
+        const y=Math.floor(p/w), x=p%w;
+        area++;
+        if (x<minx) minx=x; if (y<miny) miny=y;
+        if (x>maxx) maxx=x; if (y>maxy) maxy=y;
+        for (const [dx,dy] of dirs){
+          const xx=x+dx, yy=y+dy;
+          if (xx<0||xx>=w||yy<0||yy>=h) continue;
+          const j=yy*w+xx;
+          if (mask[j] && !visited[j]){ visited[j]=1; q.push(j); }
+        }
+      }
+      boxes.push({x:minx,y:miny,w:(maxx-minx+1),h:(maxy-miny+1),area});
+    }
+    return boxes;
+  }
+
+  function detectBoxesFromImage(img) {
+    const { canvas, w, h } = resizeToMaxSide(img, CONFIG.multi.maxSide);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const imgData = ctx.getImageData(0,0,w,h);
+    const data = imgData.data;
+
+    const bg = estimateBackgroundGray(data, w, h);
+    const delta = CONFIG.multi.bgDelta;
+    const mask = new Uint8Array(w*h);
+
+    for (let y=0; y<h; y++) {
+      for (let x=0; x<w; x++) {
+        const i = (y*w + x)*4;
+        const g = data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114;
+        mask[y*w+x] = (Math.abs(g - bg) > delta) ? 1 : 0;
+      }
+    }
+
+    // morphological closing to fill holes: dilate then erode
+    const r = CONFIG.multi.morphRadius;
+    const dil = morphDilate(mask, w, h, r);
+    const clo = morphErode(dil, w, h, r);
+
+    const comps = connectedComponents(clo, w, h);
+
+    const minA = w*h*CONFIG.multi.minAreaRatio;
+    const maxA = w*h*CONFIG.multi.maxAreaRatio;
+
+    let boxes = comps
+      .filter(b => b.area >= minA && b.area <= maxA)
+      .filter(b => b.w > 24 && b.h > 24)
+      .map(b => {
+        // padding
+        const pad = Math.round(Math.max(b.w, b.h) * CONFIG.multi.padRatio);
+        const x = Math.max(0, b.x - pad);
+        const y = Math.max(0, b.y - pad);
+        const x2 = Math.min(w, b.x + b.w + pad);
+        const y2 = Math.min(h, b.y + b.h + pad);
+        return { x, y, w: x2-x, h: y2-y, area: b.area };
+      });
+
+    // merge overlapping boxes
+    function iou(a,b){
+      const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y);
+      const x2=Math.min(a.x+a.w,b.x+b.w), y2=Math.min(a.y+a.h,b.y+b.h);
+      const iw=Math.max(0,x2-x1), ih=Math.max(0,y2-y1);
+      const inter=iw*ih;
+      const ua=a.w*a.h + b.w*b.h - inter;
+      return ua? inter/ua : 0;
+    }
+    boxes.sort((a,b)=> (b.w*b.h) - (a.w*a.h));
+    const merged=[];
+    for (const b of boxes){
+      let keep=true;
+      for (let k=0;k<merged.length;k++){
+        if (iou(b, merged[k]) > 0.35){
+          // merge into merged[k]
+          const m=merged[k];
+          const nx=Math.min(m.x,b.x), ny=Math.min(m.y,b.y);
+          const nx2=Math.max(m.x+m.w,b.x+b.w), ny2=Math.max(m.y+m.h,b.y+b.h);
+          merged[k]={x:nx,y:ny,w:nx2-nx,h:ny2-ny};
+          keep=false;
+          break;
+        }
+      }
+      if (keep) merged.push({x:b.x,y:b.y,w:b.w,h:b.h});
+    }
+
+    // Sort left-to-right, top-to-bottom
+    merged.sort((a,b)=> (a.y - b.y) || (a.x - b.x));
+    return { boxes: merged, canvas, w, h };
+  }
+
+  function cropToDataURL(srcCanvas, box) {
+    const c = makeCanvas(box.w, box.h);
+    const ctx = c.getContext("2d");
+    ctx.drawImage(srcCanvas, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
+    return c.toDataURL("image/jpeg", 0.9);
+  }
+
+  async function dataURLToImage(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+  }
+
+  // ----- Lot flow -----
+  async function handleLot(file) {
+    $("#ai-status").innerHTML = `<span class="ai-spinner"></span> Détection multi-objets…`;
+    const preview = $("#ai-preview");
+    const url = URL.createObjectURL(file);
+    preview.src = url;
+
+    try {
+      await ensureModel();
+      const img = await blobToImage(file);
+      const det = detectBoxesFromImage(img);
+
+      if (!det.boxes.length) {
+        $("#ai-status").textContent = "Aucun objet détecté. Prends la photo sur un fond uni, objets espacés.";
+        $("#ai-right").innerHTML = `<div class="ai-muted">Essaie : fond clair + objets séparés + bonne lumière.</div>`;
+        return;
+      }
+
+      $("#ai-status").textContent = `Objets détectés : ${det.boxes.length}. Analyse des références…`;
+
+      // For each box: compute emb + topK
+      const items = [];
+      for (let i=0;i<det.boxes.length;i++){
+        const b = det.boxes[i];
+        const cropUrl = cropToDataURL(det.canvas, b);
+        const cropImg = await dataURLToImage(cropUrl);
+        const emb = await imageToEmbedding(cropImg);
+        const { top } = await matchEmbedding(emb);
+        items.push({ idx:i+1, box:b, cropUrl, emb, top, chosen: null, confidence: top[0]?.score ?? 0 });
+      }
+
+      renderLotUI(items, file);
+
+    } catch (e) {
+      console.error(e);
+      $("#ai-status").textContent = "Erreur IA : " + (e?.message || e);
+      toast("Erreur IA.");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  function renderLotUI(items, file) {
+    const right = $("#ai-right");
+    if (!right) return;
+
+    // If base empty, must ask for each to be labeled (no top)
+    const needsLabels = items.some(it => !it.top?.length);
+
+    const tiles = items.map(it => {
+      const best = it.top?.[0];
+      const second = it.top?.[1];
+      const autoOk = best && best.score >= CONFIG.match.autoAcceptThreshold && (!second || (best.score-second.score) >= CONFIG.match.margin) && best.score >= CONFIG.match.doubtThreshold;
+      const doubt = !best || best.score < CONFIG.match.doubtThreshold;
+
+      const options = (it.top?.length ? it.top : []).map(x => `<option value="${safeText(x.sample.ref)}">${safeText(x.sample.ref)} (${fmtScore(x.score)})</option>`).join("");
+      const initial = autoOk ? best.sample.ref : (it.top?.[0]?.sample.ref ?? "");
+
+      // we will "ask" when doubt; auto only when very confident.
+      const badge = autoOk ? `<span class="ai-pill"><span class="ai-badge ai-ok">AUTO</span>${fmtScore(best.score)}</span>` :
+                    doubt ? `<span class="ai-pill"><span class="ai-badge ai-danger">DOUTE</span>${best ? fmtScore(best.score) : "—"}</span>` :
+                            `<span class="ai-pill"><span class="ai-badge">OK</span>${fmtScore(best.score)}</span>`;
+
+      return `
+        <div class="ai-tile" data-idx="${it.idx}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <b>Objet ${it.idx}</b>
+            ${badge}
+          </div>
+          <img src="${it.cropUrl}" alt="crop ${it.idx}"/>
+          <div class="ai-muted">Choisis la référence si doute :</div>
+          <select class="ai-select" data-pick="${it.idx}">
+            <option value="">— choisir —</option>
+            ${options}
+          </select>
+          <input class="ai-input" data-new="${it.idx}" placeholder="Ou saisir une nouvelle ref (optionnel)"/>
+          <button class="ai-btn small ghost" data-apply="${it.idx}">Appliquer</button>
+        </div>
+      `;
+    }).join("");
+
+    right.innerHTML = `
+      <div class="ai-muted">Validation lot : si une case est en <span class="ai-kbd">DOUTE</span>, clique “Appliquer” après avoir choisi/saisi la bonne ref.</div>
+      <div class="ai-grid" style="margin-top:10px">${tiles}</div>
+      <div class="ai-row" style="margin-top:12px">
+        <button class="ai-btn" id="ai-lot-confirm">✅ Valider & compter tout le lot</button>
+        <button class="ai-btn ghost" id="ai-lot-cancel">↩︎ Reprendre photo</button>
+      </div>
+      <div class="ai-muted" id="ai-lot-hint" style="margin-top:8px"></div>
+    `;
+
+    // Per-tile apply
+    right.querySelectorAll("button[data-apply]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-apply"), 10);
+        const sel = right.querySelector(`select[data-pick="${idx}"]`);
+        const inp = right.querySelector(`input[data-new="${idx}"]`);
+        const valNew = safeText(inp?.value).trim();
+        const valSel = safeText(sel?.value).trim();
+        const ref = valNew || valSel;
+        if (!ref) return toast("Choisis ou saisis une référence.");
+        const it = items.find(x => x.idx === idx);
+        if (it) it.chosen = ref;
+        toast(`Objet ${idx} → ${ref}`);
+      });
+    });
+
+    $("#ai-lot-cancel").addEventListener("click", () => openScanModal());
+
+    $("#ai-lot-confirm").addEventListener("click", async () => {
+      // For each item: decide ref
+      // rule: if very confident autoOk -> take best; else require chosen
+      const missing = [];
+      const decisions = [];
+      for (const it of items){
+        const best = it.top?.[0];
+        const second = it.top?.[1];
+        const autoOk = best && best.score >= CONFIG.match.autoAcceptThreshold && (!second || (best.score-second.score) >= CONFIG.match.margin) && best.score >= CONFIG.match.doubtThreshold;
+        const ref = autoOk ? best.sample.ref : it.chosen;
+        if (!ref) missing.push(it.idx);
+        else decisions.push({ it, ref, score: autoOk ? best.score : (best?.score ?? 0), auto: autoOk });
+      }
+
+      if (missing.length) {
+        $("#ai-lot-hint").textContent = "Doute sur objet(s) : " + missing.join(", ") + ". Choisis une référence puis “Appliquer”.";
+        toast("Il manque des validations.");
+        return;
+      }
+
+      // save samples + emit counts
+      $("#ai-lot-hint").innerHTML = `<span class="ai-spinner"></span> Enregistrement + comptage…`;
+      try {
+        for (const d of decisions){
+          // save sample from crop as thumbnail + embedding
+          const blob = await (await fetch(d.it.cropUrl)).blob();
+          const file2 = new File([blob], `crop_${d.it.idx}.jpg`, { type: blob.type || "image/jpeg" });
+          await saveSample(d.ref, file2, d.it.emb);
+          emitConfirmed(d.ref, { score: d.score, method: d.auto ? "auto_lot" : "validated_lot", idx: d.it.idx });
+        }
+        toast("Lot compté.");
+        $("#ai-lot-hint").textContent = "Terminé.";
+      } catch (e) {
+        console.error(e);
+        $("#ai-lot-hint").textContent = "Erreur : " + (e?.message || e);
+        toast("Erreur.");
+      }
+    });
+  }
+
+  // ----- Save sample + emit -----
+  async function saveSample(ref, file, embedding) {
+    const thumb = await fileToThumbDataURL(file);
+    const sample = { ref, embedding: Array.from(embedding), thumb, createdAt: Date.now() };
+    await dbPut(sample);
+  }
+
+  function emitConfirmed(ref, meta) {
+    window.dispatchEvent(new CustomEvent("ai-ref-confirmed", { detail: { ref, ...meta } }));
+    try { if (typeof window.addReferenceFromAI === "function") window.addReferenceFromAI(ref, meta); } catch {}
+  }
+
+  // ----- Base manager -----
+  async function openBaseModal(preselectRef = null) {
+    const all = await dbGetAll();
+    const byRef = new Map();
+    for (const s of all) { const arr = byRef.get(s.ref) || []; arr.push(s); byRef.set(s.ref, arr); }
+    const refs = Array.from(byRef.keys()).sort((a,b)=>a.localeCompare(b,"fr"));
+
+    openModal("Base IA", `
+      <div>
+        <div class="ai-muted">Ajouter un exemple (photo + ref) :</div>
+        <input class="ai-input" id="ai-ref-add" placeholder="Référence (ex: IR-CO8-71)" />
+        <div class="ai-row" style="margin-top:10px">
+          <button class="ai-btn" id="ai-add-photo">📷 Ajouter une photo</button>
+          <button class="ai-btn ghost" id="ai-export-json">⬇️ Export JSON</button>
+        </div>
+        <div class="ai-muted" style="margin-top:8px" id="ai-base-status"></div>
+        <div class="ai-muted" style="margin-top:14px">Références enregistrées :</div>
+        <div class="ai-list" id="ai-ref-list">
+          ${refs.length ? refs.map(r => `
+            <div class="ai-item">
+              <div><div><b>${safeText(r)}</b></div><div class="ai-muted">${byRef.get(r).length} exemple(s)</div></div>
+              <div class="ai-row"><button class="ai-btn small ghost" data-open="${safeText(r)}">Voir</button></div>
+            </div>
+          `).join("") : `<div class="ai-item"><span class="ai-muted">Aucune référence.</span></div>`}
+        </div>
+      </div>
+      <div class="ai-actions" id="ai-ref-detail">
+        <div class="ai-muted">Sélectionne une référence pour voir/supprimer ses exemples.</div>
+      </div>
+    `);
+
+    // Pre-fill and optionally open a specific reference (requested by the host app)
+    if (preselectRef) {
+      const pref = safeText(preselectRef).trim();
+      $("#ai-ref-add").value = pref;
+      if (byRef.has(pref)) renderRefDetail(pref, byRef.get(pref) || []);
+    }
+
+    $("#ai-add-photo").addEventListener("click", () => {
+      const ref = safeText($("#ai-ref-add").value).trim();
+      if (!ref) return toast("Entre une référence.");
+      const fileInput = document.createElement("input");
+      fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.capture = "environment";
+      fileInput.addEventListener("change", async () => {
+        const f = fileInput.files?.[0];
+        if (!f) return;
+        $("#ai-base-status").innerHTML = `<span class="ai-spinner"></span> Ajout…`;
+        try {
+          await ensureModel();
+          const img = await blobToImage(f);
+          const emb = await imageToEmbedding(img);
+          await saveSample(ref, f, emb);
+          $("#ai-base-status").textContent = "Exemple ajouté.";
+          toast("Ajouté.");
+          await openBaseModal(ref);
+        } catch (e) {
+          console.error(e);
+          $("#ai-base-status").textContent = "Erreur : " + (e?.message || e);
+          toast("Erreur IA.");
+        }
+      });
+      fileInput.click();
+    });
+
+    $("#ai-export-json").addEventListener("click", async () => {
+      const all2 = await dbGetAll();
+      const exportData = {
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        samples: all2.map(s => ({ id: s.id, ref: s.ref, createdAt: s.createdAt, thumb: s.thumb }))
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "base_ia_export.json";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+
+    document.querySelectorAll("button[data-open]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const ref = btn.getAttribute("data-open");
+        renderRefDetail(ref, byRef.get(ref) || []);
+      });
+    });
+
+    // (no-op)
+  }
+
+  // Quick-add: capture/select a photo and attach it as a training sample for a specific reference.
+  // Designed to work on mobile/PWA: the <input type="file"> is attached to DOM and triggered from a user gesture.
+  let _addRefInput = null;
+  function _ensureAddRefInput(){
+    if (_addRefInput) return _addRefInput;
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*';
+    // Hint mobile browsers to open camera when possible
+    inp.setAttribute('capture', 'environment');
+    inp.style.position = 'fixed';
+    inp.style.left = '-9999px';
+    inp.style.top = '-9999px';
+    inp.id = 'ai-addref-input';
+    document.body.appendChild(inp);
+    _addRefInput = inp;
+    return _addRefInput;
+  }
+
+  async function addPhotoForRef(ref){
+    const cleanRef = String(ref || '').trim();
+    if (!cleanRef) { toast('Référence invalide'); return; }
+    const input = _ensureAddRefInput();
+    input.value = '';
+
+    return new Promise((resolve) => {
+      input.onchange = async () => {
+        try{
+          const f = input.files && input.files[0];
+          if (!f) { resolve(false); return; }
+          await ensureModel();
+          const img = await blobToImage(f);
+          const emb = await imageToEmbedding(img);
+          await saveSample(cleanRef, f, emb);
+          toast(`Photo IA ajoutée pour ${cleanRef}`);
+          window.dispatchEvent(new CustomEvent('ai-base-updated', { detail: { ref: cleanRef } }));
+          resolve(true);
+        }catch(e){
+          console.error(e);
+          toast('Erreur ajout photo IA');
+          resolve(false);
+        }finally{
+          input.value = '';
+        }
+      };
+      // Must be called directly from a click/tap handler
+      input.click();
+    });
+  }
+
+  function renderRefDetail(ref, samples) {
+    const detail = $("#ai-ref-detail");
+    detail.innerHTML = `
+      <div><b>${safeText(ref)}</b> <span class="ai-badge">${samples.length} ex.</span></div>
+      <div class="ai-muted">Supprime un exemple si mauvaise validation.</div>
+      <div class="ai-list" style="margin-top:8px">
+        ${samples.slice().sort((a,b)=>b.createdAt-a.createdAt).map(s => `
+          <div class="ai-item">
+            <div style="display:flex;align-items:center;gap:10px">
+              <img src="${s.thumb}" alt="thumb" style="width:44px;height:44px;border-radius:10px;object-fit:cover;background:#e5e7eb"/>
+              <div><div class="ai-muted">${new Date(s.createdAt).toLocaleString("fr-FR")}</div><div class="ai-muted">id: ${s.id}</div></div>
+            </div>
+            <button class="ai-btn small ai-danger" data-del="${s.id}">Suppr.</button>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    detail.querySelectorAll("button[data-del]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = parseInt(btn.getAttribute("data-del"), 10);
+        if (!Number.isFinite(id)) return;
+        await dbDelete(id);
+        toast("Supprimé.");
+        await openBaseModal(ref);
+      });
+    });
+  }
+
+  // Provide minimal read access for the host UI (thumbnails / count per reference)
+  async function getRefSummary() {
+    const all = await dbGetAll();
+    const out = {};
+    for (const s of all) {
+      const ref = safeText(s.ref);
+      if (!out[ref]) out[ref] = { count: 0, thumb: null, _latest: 0 };
+      out[ref].count += 1;
+      if ((s.createdAt || 0) >= out[ref]._latest) {
+        out[ref]._latest = s.createdAt || 0;
+        out[ref].thumb = s.thumb || null;
+      }
+    }
+    // remove internal field
+    for (const k of Object.keys(out)) delete out[k]._latest;
+    return out;
+  }
+
+  function init() {
+    injectUI();
+    window.addEventListener("keydown", (e) => { if (e.altKey && (e.key === "i" || e.key === "I")) openScanModal(); });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+
+  window.AIRefAddon = { openScan: openScanModal, openBase: openBaseModal, addPhotoForRef, getRefSummary };
+})();
+</script>
 </body>
 </html>

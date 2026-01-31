@@ -1,12 +1,12 @@
 // Bump version whenever files change to force PWA update
-const CACHE_NAME = "inventaire-pwa-v5-ai1";
+const CACHE_NAME = "inventaire-pwa-v8-ai4|v6";
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png",
-  "./ai/ai.js"
+  "./ai.js"
 ];
 
 // Install: pre-cache core assets
