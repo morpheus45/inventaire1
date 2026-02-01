@@ -946,7 +946,7 @@ async function renderRefs(){
 })();
 
 
-IA photo base (if available)
+// IA photo base (if available)
   let summary = {};
   if (window.AIRefAddon && typeof window.AIRefAddon.getRefSummary === "function") {
     try { summary = await window.AIRefAddon.getRefSummary(); } catch { summary = {}; }
