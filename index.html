@@ -386,39 +386,6 @@ function sanitizeRef(s){
   return (s || "").trim().replace(/\s+/g," ");
 }
 
-
-
-/* --------------------- Références unifiées (manuel + IA) --------------------- */
-function ensureAI(){
-  const ok = !!(window.AIRefAddon && typeof window.AIRefAddon.openScan === "function");
-  if(!ok){
-    alert("Module IA non chargé. Recharge la page ou désinstalle/réinstalle la PWA.");
-    return false;
-  }
-  return true;
-}
-
-// Ajoute/actualise une référence dans la liste locale (source: "manual" | "ai")
-function upsertRef(ref, source="manual"){
-  const r = sanitizeRef(ref);
-  if(!r) return null;
-  const refs = loadJSON(K.refs, []);
-  if(!refs.includes(r)){
-    refs.unshift(r);
-    saveJSON(K.refs, refs.slice(0,200));
-  }
-  // On ne stocke pas la provenance pour rester compatible (liste simple).
-  return r;
-}
-
-function rebuildRefSelect(){
-  const refSel = $("refSelect");
-  if(!refSel) return;
-  const refs = loadJSON(K.refs, []);
-  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
-    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
-}
-
 /* --------------------- Tabs --------------------- */
 document.querySelectorAll(".tab").forEach(t => {
   t.addEventListener("click", () => {
@@ -539,9 +506,43 @@ $("btnAdd").addEventListener("click", () => {
   lines.push({ ref, qty, neufOui, usiteOui, comment });
   renderLines();
 
-  // auto-save reference (unifié manuel + IA)
-  upsertRef(ref, "manual");
-  rebuildRefSelect();
+  // auto-save reference if new
+  const refs = loadJSON(K.refs, []);
+  if(!refs.includes(ref)){
+    refs.unshift(ref);
+    saveJSON(K.refs, refs.slice(0,200));
+    // Menu déroulant des références
+  const refSel = $("refSelect");
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+
+  // L’émetteur doit correspondre au magasin
+  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
+  // init: aligne au chargement
+  $("emetteur").value = $("magasin").value;
+
+  // Interrupteurs NEUF / USITÉ
+  function setNeuf(v){
+    const yes = (v === "oui");
+    $("neufOui").checked = yes; $("neufNon").checked = !yes;
+    $("neufSelect").value = v;
+    if(yes) setUsite("non");
+  }
+  function setUsite(v){
+    const yes = (v === "oui");
+    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
+    $("usiteSelect").value = v;
+    if(yes) setNeuf("non");
+  }
+  // valeurs par défaut
+  setNeuf("non");
+  setUsite("non");
+  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
+  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
+  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
+  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
+
+  }
 
   $("refSelect").selectedIndex = 0;
   $("qtyInput").value = "1";
@@ -550,34 +551,6 @@ $("btnAdd").addEventListener("click", () => {
   $("usiteSelect").value = "non";
 });
 
-
-
-/* --------------------- IA → Ajout automatique au bon + unification des références --------------------- */
-function addOrIncrementLine(ref, qty, neufOui, usiteOui, comment){
-  const r = sanitizeRef(ref);
-  if(!r) return;
-  const q = Math.max(1, parseInt(qty || 1, 10));
-  // Si une ligne identique existe (même ref + mêmes cases + même commentaire), on cumule la quantité
-  const existing = lines.find(l => l.ref === r && !!l.neufOui === !!neufOui && !!l.usiteOui === !!usiteOui && (l.comment || "") === (comment || ""));
-  if(existing) existing.qty += q;
-  else lines.push({ ref: r, qty: q, neufOui: !!neufOui, usiteOui: !!usiteOui, comment: comment || "" });
-  renderLines();
-}
-
-// Appelé par le module IA (photo simple ou lot). 1 appel = 1 objet compté.
-window.addReferenceFromAI = (ref, meta = {}) => {
-  const r = upsertRef(ref, "ai");
-  if(!r) return;
-  // rend la ref disponible en sélection manuelle immédiatement
-  rebuildRefSelect();
-
-  // on respecte l'état actuel NEUF/USITÉ (si l'utilisateur l'a sélectionné)
-  const neufOui = $("neufSelect")?.value === "oui";
-  const usiteOui = $("usiteSelect")?.value === "oui";
-
-  // comment: on laisse vide pour ne pas polluer le bon
-  addOrIncrementLine(r, 1, neufOui, usiteOui, "");
-};
 $("btnClearLine").addEventListener("click", () => {
   $("refSelect").selectedIndex = 0;
   $("qtyInput").value = "1";
@@ -867,10 +840,8 @@ $("btnClearHist").addEventListener("click", () => {
 });
 
 /* --------------------- Références --------------------- */
-
 async function renderRefs(){
-  // refs = liste unifiée (manuel + IA)
-  let refs = loadJSON(K.refs, []);
+  const refs = loadJSON(K.refs, []);
   const tbody = $("refsTable");
   tbody.innerHTML = "";
 
@@ -883,21 +854,97 @@ async function renderRefs(){
     $("btnIAOpenBase").onclick = () => { if(!ensureAI()) return; window.AIRefAddon.openBase(); };
   }
 
-  // Pull thumbs/counts from IA photo base (if available)
+  // Pull thumbs/counts from 
+/* --------------------- IA integration --------------------- */
+/* L'addon IA déclenche un event "ai-ref-confirmed" et peut appeler window.addReferenceFromAI(ref, meta).
+   On utilise ça pour:
+   - mémoriser les derniers choix (réf + état neuf/usité)
+   - pré-remplir la ligne, et (optionnel) auto-valider la ligne.
+*/
+(function(){
+  const AI_PREF_KEY = "inv_ai_prefs_v1";
+  function loadAIPrefs(){
+    try{ return JSON.parse(localStorage.getItem(AI_PREF_KEY) || "{}") || {}; }catch(_){ return {}; }
+  }
+  function saveAIPrefs(p){
+    try{ localStorage.setItem(AI_PREF_KEY, JSON.stringify(p||{})); }catch(_){}
+  }
+  function setNeufUsite(neufOui, usiteOui){
+    // mutual exclusivity
+    if(neufOui) usiteOui = false;
+    if(usiteOui) neufOui = false;
+
+    const neufV = neufOui ? "oui" : "non";
+    const usiteV = usiteOui ? "oui" : "non";
+
+    const ns = document.getElementById("neufSelect");
+    const us = document.getElementById("usiteSelect");
+    if(ns) ns.value = neufV;
+    if(us) us.value = usiteV;
+
+    const nOui = document.getElementById("neufOui");
+    const nNon = document.getElementById("neufNon");
+    const uOui = document.getElementById("usiteOui");
+    const uNon = document.getElementById("usiteNon");
+    if(nOui && nNon){ nOui.checked = neufOui; nNon.checked = !neufOui; }
+    if(uOui && uNon){ uOui.checked = usiteOui; uNon.checked = !usiteOui; }
+  }
+
+  window.addReferenceFromAI = function(ref, meta){
+    try{
+      const r = sanitizeRef(ref);
+      if(!r) return;
+
+      // prefs
+      const prefs = loadAIPrefs();
+      prefs.lastRef = r;
+
+      const neufOui = !!(meta && meta.neufOui);
+      const usiteOui = !!(meta && meta.usiteOui);
+      prefs.lastNeuf = neufOui ? "oui" : "non";
+      prefs.lastUsite = usiteOui ? "oui" : "non";
+      prefs.perRef = prefs.perRef || {};
+      prefs.perRef[r] = { neuf: prefs.lastNeuf, usite: prefs.lastUsite };
+      saveAIPrefs(prefs);
+
+      // ensure ref exists in select list
+      const sel = document.getElementById("refSelect");
+      if(sel){
+        const hasOpt = Array.from(sel.options).some(o => sanitizeRef(o.value) === r);
+        if(!hasOpt){
+          // persist in refs store too (same behaviour as manual add)
+          const refsArr = loadJSON(K.refs, []);
+          if(!refsArr.includes(r)){
+            refsArr.unshift(r);
+            saveJSON(K.refs, refsArr.slice(0,200));
+          }
+          fillSelect(sel, refsArr.map(code=>({code, label:""})));
+        }
+        sel.value = r;
+      }
+
+      const qtyInput = document.getElementById("qtyInput");
+      if(qtyInput) qtyInput.value = String(meta && meta.qty ? meta.qty : 1);
+
+      setNeufUsite(neufOui, usiteOui);
+
+      // auto validate line if requested (default true for IA)
+      const autoAdd = meta && ("autoAdd" in meta) ? !!meta.autoAdd : true;
+      if(autoAdd){
+        const btn = document.getElementById("btnAdd");
+        if(btn) btn.click();
+      }
+    }catch(e){
+      console.error("addReferenceFromAI error", e);
+    }
+  };
+})();
+
+
+IA photo base (if available)
   let summary = {};
   if (window.AIRefAddon && typeof window.AIRefAddon.getRefSummary === "function") {
     try { summary = await window.AIRefAddon.getRefSummary(); } catch { summary = {}; }
-  }
-
-  // Unifie automatiquement les références IA dans la liste manuelle
-  const aiRefs = Object.keys(summary || {});
-  if (aiRefs.length) {
-    let changed = false;
-    for (const r of aiRefs) {
-      const rr = sanitizeRef(r);
-      if (rr && !refs.includes(rr)) { refs.push(rr); changed = true; }
-    }
-    if (changed) { saveJSON(K.refs, refs.slice(0,200)); rebuildRefSelect(); }
   }
 
   refs.forEach((r, idx) => {
@@ -929,11 +976,21 @@ async function renderRefs(){
   tbody.querySelectorAll("button[data-rdel]").forEach(b => {
     b.addEventListener("click", async () => {
       const refs2 = loadJSON(K.refs, []);
-      refs2.splice(Number(b.dataset.rdel),1);
+      const i = Number(b.dataset.rdel);
+      const ref = refs2[i];
+      if(!ref) return;
+
+      if(!confirm(`Supprimer la référence "${ref}" ?`)) return;
+
+      refs2.splice(i, 1);
       saveJSON(K.refs, refs2);
       renderRefs();
+
       // Menu déroulant des références (après ajout/suppression)
-      rebuildRefSelect();
+      const refSel2 = $("refSelect");
+      const opts = `<option value="" disabled selected>Choisir une référence...</option>` +
+        refs2.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+      refSel2.innerHTML = opts;
     });
   });
 
@@ -950,20 +1007,50 @@ async function renderRefs(){
   tbody.querySelectorAll(".aiThumbs").forEach(d => {
     d.addEventListener("click", () => {
       const ref = refs[Number(d.dataset.idx)];
-      if(!ensureAI()) return;
-      window.AIRefAddon.openBase(ref);
+      openBase(ref);
     });
   });
 
 }
-
-$("btnAddRef").addEventListener("click", async () => {
+$("btnAddRef").addEventListener("click", () => {
   const r = sanitizeRef($("newRef").value);
   if(!r) return;
-  upsertRef(r, "manual");
+  const refs = loadJSON(K.refs, []);
+  if(!refs.includes(r)) refs.unshift(r);
+  saveJSON(K.refs, refs.slice(0,200));
   $("newRef").value = "";
-  rebuildRefSelect();
-  await renderRefs();
+  renderRefs();
+  // Menu déroulant des références
+  const refSel = $("refSelect");
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+
+  // L’émetteur doit correspondre au magasin
+  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
+  // init: aligne au chargement
+  $("emetteur").value = $("magasin").value;
+
+  // Interrupteurs NEUF / USITÉ
+  function setNeuf(v){
+    const yes = (v === "oui");
+    $("neufOui").checked = yes; $("neufNon").checked = !yes;
+    $("neufSelect").value = v;
+    if(yes) setUsite("non");
+  }
+  function setUsite(v){
+    const yes = (v === "oui");
+    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
+    $("usiteSelect").value = v;
+    if(yes) setNeuf("non");
+  }
+  // valeurs par défaut
+  setNeuf("non");
+  setUsite("non");
+  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
+  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
+  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
+  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
+
 });
 
 /* --------------------- Magasins --------------------- */
@@ -1015,17 +1102,6 @@ if("serviceWorker" in navigator){
 /* --------------------- Boot --------------------- */
 initData();
 $("date").value = todayISO();
-
-// Sync des références IA (base photos) vers la liste manuelle, dès que le module IA est chargé
-setTimeout(async () => {
-  try {
-    if (window.AIRefAddon && typeof window.AIRefAddon.getRefSummary === "function") {
-      const sum = await window.AIRefAddon.getRefSummary();
-      Object.keys(sum || {}).forEach(r => upsertRef(r, "ai"));
-      rebuildRefSelect();
-    }
-  } catch {}
-}, 1200);
 
 // restore draft if exists
 const draft = loadJSON(K.draft, null);
@@ -1103,6 +1179,77 @@ if(draft){
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
+
+  // Persist AI choices (last ref + last état + état par ref)
+  const AI_PREF_KEY = "inv_ai_prefs_v1";
+  function loadAIPrefs(){
+    try{ return JSON.parse(localStorage.getItem(AI_PREF_KEY) || "{}") || {}; }catch(_){ return {}; }
+  }
+  function saveAIPrefs(p){
+    try{ localStorage.setItem(AI_PREF_KEY, JSON.stringify(p||{})); }catch(_){}
+  }
+  function getCondForRef(ref){
+    const p = loadAIPrefs();
+    const per = (p.perRef && p.perRef[ref]) ? p.perRef[ref] : null;
+    const lastNeuf = p.lastNeuf || "non";
+    const lastUsite = p.lastUsite || "non";
+    const neuf = per?.neuf || lastNeuf;
+    const usite = per?.usite || lastUsite;
+    return { neuf, usite };
+  }
+  function normalizeCond(neuf, usite){
+    // enforce exclusivity
+    if(neuf==="oui") usite="non";
+    if(usite==="oui") neuf="non";
+    return { neuf, usite };
+  }
+  function condUIHTML(ref){
+    const c0 = getCondForRef(ref);
+    const c = normalizeCond(c0.neuf, c0.usite);
+    return `
+      <div style="border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;background:#fff">
+        <div class="ai-muted" style="margin-bottom:8px"><b>État</b> (mémorisé)</div>
+        <div class="ai-row">
+          <label class="ai-muted" style="min-width:62px">Neuf</label>
+          <select class="ai-input" id="ai-cond-neuf" style="max-width:140px">
+            <option value="non" ${c.neuf==="non"?"selected":""}>Non</option>
+            <option value="oui" ${c.neuf==="oui"?"selected":""}>Oui</option>
+          </select>
+          <label class="ai-muted" style="min-width:62px">Usité</label>
+          <select class="ai-input" id="ai-cond-usite" style="max-width:140px">
+            <option value="non" ${c.usite==="non"?"selected":""}>Non</option>
+            <option value="oui" ${c.usite==="oui"?"selected":""}>Oui</option>
+          </select>
+        </div>
+        <div class="ai-muted" style="margin-top:6px">Astuce : si “Neuf = Oui”, “Usité” passe automatiquement à Non (et inversement).</div>
+      </div>
+    `;
+  }
+  let _condTouched = false;
+
+  function wireCondUI(){
+    _condTouched = false;
+
+    const n = $("#ai-cond-neuf");
+    const u = $("#ai-cond-usite");
+    if(!n || !u) return;
+    n.addEventListener("change", () => { _condTouched = true; if(n.value==="oui") u.value="non"; });
+    u.addEventListener("change", () => { _condTouched = true; if(u.value==="oui") n.value="non"; });
+  }
+  function readCondUI(){
+    const n = $("#ai-cond-neuf")?.value || "non";
+    const u = $("#ai-cond-usite")?.value || "non";
+    return normalizeCond(n,u);
+  }
+  function rememberChoice(ref, cond){
+    const p = loadAIPrefs();
+    p.lastRef = ref;
+    p.lastNeuf = cond.neuf;
+    p.lastUsite = cond.usite;
+    p.perRef = p.perRef || {};
+    p.perRef[ref] = { neuf: cond.neuf, usite: cond.usite };
+    saveAIPrefs(p);
+  }
 
   function cosineSimilarity(a, b) {
     let dot = 0, na = 0, nb = 0;
@@ -1292,6 +1439,10 @@ if(draft){
       .ai-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
       @media(min-width:720px){.ai-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
       .ai-tile{border:1px solid #e5e7eb;border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:8px}
+      .ai-tile.off{opacity:.45;filter:grayscale(.35)}
+      .ai-keep{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#374151;user-select:none}
+      .ai-keep input{width:16px;height:16px}
+
       .ai-tile img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:10px;background:#e5e7eb}
       .ai-select{width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:10px}
       .ai-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;border-radius:999px;padding:3px 10px;background:#f3f4f6}
@@ -1431,15 +1582,17 @@ if(draft){
       if (!top.length) {
         right.innerHTML = `
           <div class="ai-muted">Base IA vide. Ajoute une référence :</div>
+          ${condUIHTML("")}
           <input class="ai-input" id="ai-new-ref" placeholder="Référence (ex: IR-CO8-71)" />
           <button class="ai-btn" id="ai-save-first">✅ Enregistrer + compter</button>
         `;
+        wireCondUI();
         $("#ai-save-first").addEventListener("click", async () => {
           const ref = safeText($("#ai-new-ref").value).trim();
           if (!ref) return toast("Entre une référence.");
           await saveSample(ref, file, emb);
           toast("Ajouté + compté.");
-          emitConfirmed(ref, { score: 1, method: "first_sample_single" });
+          emitConfirmed(ref, { score: 1, method: "first_sample_single", cond: readCondUI() });
         });
       } else {
         const best = top[0];
@@ -1449,6 +1602,7 @@ if(draft){
 
         right.innerHTML = `
           <div class="ai-muted">Propositions :</div>
+          ${condUIHTML(safeText(top[0]?.sample?.ref || ""))}
           ${top.map((x, idx) => `
             <button class="ai-btn ${idx===0 ? "" : "ghost"}" data-ref="${safeText(x.sample.ref)}" data-score="${x.score}">
               ${safeText(x.sample.ref)} <span class="ai-badge">${fmtScore(x.score)}</span>
@@ -1458,28 +1612,33 @@ if(draft){
           <div class="ai-muted" style="margin-top:6px">Valider = compter + apprendre.</div>
         `;
 
+        wireCondUI();
+
         right.querySelectorAll("button[data-ref]").forEach(btn => {
           btn.addEventListener("click", async () => {
             const ref = btn.getAttribute("data-ref");
             const score = parseFloat(btn.getAttribute("data-score"));
             await saveSample(ref, file, emb);
             toast(`Validé : ${ref}`);
-            emitConfirmed(ref, { score, method: "validated_single" });
+            const cond = _condTouched ? readCondUI() : normalizeCond(getCondForRef(ref).neuf, getCondForRef(ref).usite);
+            emitConfirmed(ref, { score, method: "validated_single", cond });
           });
         });
 
         $("#ai-other").addEventListener("click", () => {
           right.innerHTML = `
             <div class="ai-muted">Nouvelle référence :</div>
+            ${condUIHTML("")}
             <input class="ai-input" id="ai-new-ref2" placeholder="Référence (ex: IR-CO8-72)" />
             <button class="ai-btn" id="ai-save-new">✅ Enregistrer + compter</button>
           `;
+          wireCondUI();
           $("#ai-save-new").addEventListener("click", async () => {
             const ref = safeText($("#ai-new-ref2").value).trim();
             if (!ref) return toast("Entre une référence.");
             await saveSample(ref, file, emb);
             toast(`Ajouté : ${ref}`);
-            emitConfirmed(ref, { score: 1, method: "new_ref_single" });
+            emitConfirmed(ref, { score: 1, method: "new_ref_single", cond: readCondUI() });
           });
         });
 
@@ -1487,7 +1646,7 @@ if(draft){
         if (autoOk && !doubt) {
           await saveSample(best.sample.ref, file, emb);
           toast(`Auto : ${best.sample.ref} (${fmtScore(best.score)})`);
-          emitConfirmed(best.sample.ref, { score: best.score, method: "auto_single" });
+          emitConfirmed(best.sample.ref, { score: best.score, method: "auto_single", cond: getCondForRef(best.sample.ref) });
         } else {
           // Explicitly tell user there is doubt
           if (doubt) $("#ai-status").textContent = "Doute : choisis la bonne référence (ou ajoute une nouvelle).";
@@ -1729,6 +1888,8 @@ if(draft){
 
   function renderLotUI(items, file) {
     const right = $("#ai-right");
+    // default: keep all detections
+    items.forEach(it => { if (typeof it.keep === "undefined") it.keep = true; });
     if (!right) return;
 
     // If base empty, must ask for each to be labeled (no top)
@@ -1739,19 +1900,24 @@ if(draft){
       const second = it.top?.[1];
       const autoOk = best && best.score >= CONFIG.match.autoAcceptThreshold && (!second || (best.score-second.score) >= CONFIG.match.margin) && best.score >= CONFIG.match.doubtThreshold;
       const doubt = !best || best.score < CONFIG.match.doubtThreshold;
-
-      const options = (it.top?.length ? it.top : []).map(x => `<option value="${safeText(x.sample.ref)}">${safeText(x.sample.ref)} (${fmtScore(x.score)})</option>`).join("");
       const initial = autoOk ? best.sample.ref : (it.top?.[0]?.sample.ref ?? "");
-
-      // we will "ask" when doubt; auto only when very confident.
+      const options = (it.top?.length ? it.top : []).map(x => {
+        const ref = safeText(x.sample.ref);
+        const sel = (ref === initial) ? " selected" : "";
+        return `<option value="${ref}"${sel}>${ref} (${fmtScore(x.score)})</option>`;
+      }).join("");
+// we will "ask" when doubt; auto only when very confident.
       const badge = autoOk ? `<span class="ai-pill"><span class="ai-badge ai-ok">AUTO</span>${fmtScore(best.score)}</span>` :
                     doubt ? `<span class="ai-pill"><span class="ai-badge ai-danger">DOUTE</span>${best ? fmtScore(best.score) : "—"}</span>` :
                             `<span class="ai-pill"><span class="ai-badge">OK</span>${fmtScore(best.score)}</span>`;
 
       return `
-        <div class="ai-tile" data-idx="${it.idx}">
+        <div class="ai-tile ${it.keep===false?"off":""}" data-idx="${it.idx}">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <b>Objet ${it.idx}</b>
+            <div style="display:flex;align-items:center;gap:10px">
+              <b>Objet ${it.idx}</b>
+              <label class="ai-keep"><input type="checkbox" data-keep="${it.idx}" ${it.keep===false?"":"checked"}> garder</label>
+            </div>
             ${badge}
           </div>
           <img src="${it.cropUrl}" alt="crop ${it.idx}"/>
@@ -1768,6 +1934,14 @@ if(draft){
 
     right.innerHTML = `
       <div class="ai-muted">Validation lot : si une case est en <span class="ai-kbd">DOUTE</span>, clique “Appliquer” après avoir choisi/saisi la bonne ref.</div>
+      ${condUIHTML("")}
+
+      <div class="ai-row" style="margin-top:10px">
+        <button class="ai-btn small ghost" id="ai-keep-all">Tout garder</button>
+        <button class="ai-btn small ghost" id="ai-keep-auto">Garder AUTO</button>
+        <button class="ai-btn small ghost" id="ai-keep-none">Tout écarter</button>
+      </div>
+      <div class="ai-muted" id="ai-keep-stats" style="margin-top:6px"></div>
       <div class="ai-grid" style="margin-top:10px">${tiles}</div>
       <div class="ai-row" style="margin-top:12px">
         <button class="ai-btn" id="ai-lot-confirm">✅ Valider & compter tout le lot</button>
@@ -1775,6 +1949,71 @@ if(draft){
       </div>
       <div class="ai-muted" id="ai-lot-hint" style="margin-top:8px"></div>
     `;
+
+    wireCondUI();
+
+    // Keep / discard toggles
+    const updateKeepStats = () => {
+      const kept = items.filter(x => x.keep !== false).length;
+      const total = items.length;
+      const el = $("#ai-keep-stats");
+      if (el) el.textContent = `${kept}/${total} objet(s) gardé(s). Décoche “garder” pour ignorer une détection.`;
+    };
+    updateKeepStats();
+
+    right.querySelectorAll('input[type="checkbox"][data-keep]').forEach(chk => {
+      chk.addEventListener("change", () => {
+        const idx = parseInt(chk.getAttribute("data-keep"), 10);
+        const it = items.find(x => x.idx === idx);
+        if (it) it.keep = chk.checked;
+        const tile = right.querySelector(`.ai-tile[data-idx="${idx}"]`);
+        if (tile) tile.classList.toggle("off", !chk.checked);
+        updateKeepStats();
+      });
+    });
+
+    const setAllKeep = (mode) => {
+      for (const it of items){
+        if (it.keep === false) continue;
+        const best = it.top?.[0];
+        const second = it.top?.[1];
+        const autoOk = best && best.score >= CONFIG.match.autoAccept && (!second || (best.score - second.score) >= CONFIG.match.margin) && best.score >= CONFIG.match.doubtThreshold;
+        if (mode === "all") it.keep = true;
+        if (mode === "none") it.keep = false;
+        if (mode === "auto") it.keep = !!autoOk;
+      }
+      // refresh UI
+      right.querySelectorAll('input[type="checkbox"][data-keep]').forEach(chk => {
+        const idx = parseInt(chk.getAttribute("data-keep"), 10);
+        const it = items.find(x => x.idx === idx);
+        chk.checked = (it?.keep !== false);
+        const tile = right.querySelector(`.ai-tile[data-idx="${idx}"]`);
+        if (tile) tile.classList.toggle("off", !chk.checked);
+      });
+      updateKeepStats();
+    };
+
+    $("#ai-keep-all")?.addEventListener("click", () => setAllKeep("all"));
+    $("#ai-keep-none")?.addEventListener("click", () => setAllKeep("none"));
+    $("#ai-keep-auto")?.addEventListener("click", () => setAllKeep("auto"));
+
+    // Auto-save selection without requiring "Appliquer"
+    right.querySelectorAll('select[data-pick]').forEach(sel => {
+      sel.addEventListener("change", () => {
+        const idx = parseInt(sel.getAttribute("data-pick"), 10);
+        const it = items.find(x => x.idx === idx);
+        if (it) it.chosen = safeText(sel.value).trim();
+      });
+    });
+    right.querySelectorAll('input[data-new]').forEach(inp => {
+      inp.addEventListener("input", () => {
+        const idx = parseInt(inp.getAttribute("data-new"), 10);
+        const it = items.find(x => x.idx === idx);
+        if (it) it.chosen = safeText(inp.value).trim();
+      });
+    });
+
+
 
     // Per-tile apply
     right.querySelectorAll("button[data-apply]").forEach(btn => {
@@ -1799,6 +2038,12 @@ if(draft){
       // rule: if very confident autoOk -> take best; else require chosen
       const missing = [];
       const decisions = [];
+      const keptCount = items.filter(x => x.keep !== false).length;
+      if (!keptCount) {
+        $("#ai-lot-hint").textContent = "Aucun objet gardé. Coche au moins une détection.";
+        toast("Rien à valider.");
+        return;
+      }
       for (const it of items){
         const best = it.top?.[0];
         const second = it.top?.[1];
@@ -1822,7 +2067,7 @@ if(draft){
           const blob = await (await fetch(d.it.cropUrl)).blob();
           const file2 = new File([blob], `crop_${d.it.idx}.jpg`, { type: blob.type || "image/jpeg" });
           await saveSample(d.ref, file2, d.it.emb);
-          emitConfirmed(d.ref, { score: d.score, method: d.auto ? "auto_lot" : "validated_lot", idx: d.it.idx });
+          emitConfirmed(d.ref, { score: d.score, method: d.auto ? "auto_lot" : "validated_lot", idx: d.it.idx, cond: readCondUI() });
         }
         toast("Lot compté.");
         $("#ai-lot-hint").textContent = "Terminé.";
@@ -1839,16 +2084,39 @@ if(draft){
     const thumb = await fileToThumbDataURL(file);
     const sample = { ref, embedding: Array.from(embedding), thumb, createdAt: Date.now() };
     await dbPut(sample);
-    // Unifie la référence IA dans la liste manuelle de l'app
-    try {
-      if (typeof window.upsertRef === "function") window.upsertRef(ref, "ai");
-      if (typeof window.rebuildRefSelect === "function") window.rebuildRefSelect();
-    } catch {}
   }
 
   function emitConfirmed(ref, meta) {
-    window.dispatchEvent(new CustomEvent("ai-ref-confirmed", { detail: { ref, ...meta } }));
-    try { if (typeof window.addReferenceFromAI === "function") window.addReferenceFromAI(ref, meta); } catch {}
+    const r = safeText(ref).trim();
+    const m = meta || {};
+    // condition: from meta.cond or UI or stored per-ref
+    let cond = m.cond;
+    if (!cond) {
+      // if UI present, read it; otherwise use stored value for this ref
+      try{
+        const hasUI = !!($("#ai-cond-neuf") && $("#ai-cond-usite"));
+        cond = hasUI ? readCondUI() : normalizeCond(getCondForRef(r).neuf, getCondForRef(r).usite);
+      }catch(_){
+        const c = getCondForRef(r);
+        cond = normalizeCond(c.neuf, c.usite);
+      }
+    } else {
+      cond = normalizeCond(cond.neuf || "non", cond.usite || "non");
+    }
+    // remember choice
+    try{ rememberChoice(r, cond); }catch(_){}
+
+    const payload = {
+      ref: r,
+      ...m,
+      cond,
+      neufOui: cond.neuf === "oui",
+      usiteOui: cond.usite === "oui",
+      autoAdd: ("autoAdd" in m) ? !!m.autoAdd : true,
+    };
+
+    window.dispatchEvent(new CustomEvent("ai-ref-confirmed", { detail: payload }));
+    try { if (typeof window.addReferenceFromAI === "function") window.addReferenceFromAI(r, payload); } catch {}
   }
 
   // ----- Base manager -----
@@ -1881,6 +2149,12 @@ if(draft){
         <div class="ai-muted">Sélectionne une référence pour voir/supprimer ses exemples.</div>
       </div>
     `);
+
+    // Pré-remplir avec le dernier choix mémorisé (si dispo)
+    try{
+      const p = loadAIPrefs();
+      if (!preselectRef && p && p.lastRef) $("#ai-ref-add").value = safeText(p.lastRef);
+    }catch(_){}
 
     // Pre-fill and optionally open a specific reference (requested by the host app)
     if (preselectRef) {
@@ -2011,6 +2285,7 @@ if(draft){
       btn.addEventListener("click", async () => {
         const id = parseInt(btn.getAttribute("data-del"), 10);
         if (!Number.isFinite(id)) return;
+        if(!confirm("Supprimer cet exemple IA ?")) return;
         await dbDelete(id);
         toast("Supprimé.");
         await openBaseModal(ref);
