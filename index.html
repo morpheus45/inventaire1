@@ -412,9 +412,13 @@ function fillSelect(sel, arr){
 }
 
 function initData(){
-  const refs = loadJSON(K.refs, null) || DEFAULT_REFS;
-  const mags = loadJSON(K.mags, null) || DEFAULT_MAGS;
-  const emit = loadJSON(K.emit, null) || DEFAULT_EMETTEURS;
+  const refs0 = loadJSON(K.refs, null);
+  const mags0 = loadJSON(K.mags, null);
+  const emit0 = loadJSON(K.emit, null);
+
+  const refs = (Array.isArray(refs0) && refs0.length) ? refs0 : DEFAULT_REFS;
+  const mags = (Array.isArray(mags0) && mags0.length) ? mags0 : DEFAULT_MAGS;
+  const emit = (Array.isArray(emit0) && emit0.length) ? emit0 : DEFAULT_EMETTEURS;
 
   saveJSON(K.refs, refs);
   saveJSON(K.mags, mags);
@@ -869,6 +873,7 @@ async function renderRefs(){
   function saveAIPrefs(p){
     try{ localStorage.setItem(AI_PREF_KEY, JSON.stringify(p||{})); }catch(_){}
   }
+  function canonRef(ref){ return String(ref||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
   function setNeufUsite(neufOui, usiteOui){
     // mutual exclusivity
     if(neufOui) usiteOui = false;
@@ -904,7 +909,7 @@ async function renderRefs(){
       prefs.lastNeuf = neufOui ? "oui" : "non";
       prefs.lastUsite = usiteOui ? "oui" : "non";
       prefs.perRef = prefs.perRef || {};
-      prefs.perRef[r] = { neuf: prefs.lastNeuf, usite: prefs.lastUsite };
+      prefs.perRef[canonRef(r)] = { neuf: prefs.lastNeuf, usite: prefs.lastUsite };
       saveAIPrefs(prefs);
 
       // ensure ref exists in select list
@@ -1136,8 +1141,6 @@ if(draft){
     debug: false
   };
 </script>
-<script src="./ai.js"></script>
-
 <!-- AI addon (inlined to avoid GitHub Pages 404/cache issues) -->
 <script>
 /*!
@@ -1188,9 +1191,10 @@ if(draft){
   function saveAIPrefs(p){
     try{ localStorage.setItem(AI_PREF_KEY, JSON.stringify(p||{})); }catch(_){}
   }
+  function canonRef(ref){ return String(ref||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
   function getCondForRef(ref){
     const p = loadAIPrefs();
-    const per = (p.perRef && p.perRef[ref]) ? p.perRef[ref] : null;
+    const per = (p.perRef && p.perRef[canonRef(ref)]) ? p.perRef[canonRef(ref)] : null;
     const lastNeuf = p.lastNeuf || "non";
     const lastUsite = p.lastUsite || "non";
     const neuf = per?.neuf || lastNeuf;
@@ -1233,8 +1237,36 @@ if(draft){
     const n = $("#ai-cond-neuf");
     const u = $("#ai-cond-usite");
     if(!n || !u) return;
-    n.addEventListener("change", () => { _condTouched = true; if(n.value==="oui") u.value="non"; });
-    u.addEventListener("change", () => { _condTouched = true; if(u.value==="oui") n.value="non"; });
+
+    function set(group, val){
+      _condTouched = true;
+      if(group==="neuf"){
+        n.value = val;
+        if(val==="oui") u.value = "non";
+      } else {
+        u.value = val;
+        if(val==="oui") n.value = "non";
+      }
+
+      document.querySelectorAll("button[data-cond]").forEach(b=>{
+        const g=b.getAttribute("data-cond");
+        const v=b.getAttribute("data-val");
+        const cur = (g==="neuf") ? n.value : u.value;
+        b.classList.toggle("ghost", v!==cur);
+      });
+    }
+
+    document.querySelectorAll("button[data-cond]").forEach(b=>{
+      b.addEventListener("click", ()=> set(b.getAttribute("data-cond"), b.getAttribute("data-val")));
+    });
+
+    // first paint
+    document.querySelectorAll("button[data-cond]").forEach(b=>{
+      const g=b.getAttribute("data-cond");
+      const v=b.getAttribute("data-val");
+      const cur = (g==="neuf") ? n.value : u.value;
+      b.classList.toggle("ghost", v!==cur);
+    });
   }
   function readCondUI(){
     const n = $("#ai-cond-neuf")?.value || "non";
@@ -1247,7 +1279,7 @@ if(draft){
     p.lastNeuf = cond.neuf;
     p.lastUsite = cond.usite;
     p.perRef = p.perRef || {};
-    p.perRef[ref] = { neuf: cond.neuf, usite: cond.usite };
+    p.perRef[canonRef(ref)] = { neuf: cond.neuf, usite: cond.usite };
     saveAIPrefs(p);
   }
 
@@ -1582,8 +1614,7 @@ if(draft){
       if (!top.length) {
         right.innerHTML = `
           <div class="ai-muted">Base IA vide. Ajoute une référence :</div>
-          ${condUIHTML("")}
-          <input class="ai-input" id="ai-new-ref" placeholder="Référence (ex: IR-CO8-71)" />
+              <input class="ai-input" id="ai-new-ref" placeholder="Référence (ex: IR-CO8-71)" />
           <button class="ai-btn" id="ai-save-first">✅ Enregistrer + compter</button>
         `;
         wireCondUI();
@@ -1927,6 +1958,24 @@ if(draft){
             ${options}
           </select>
           <input class="ai-input" data-new="${it.idx}" placeholder="Ou saisir une nouvelle ref (optionnel)"/>
+          
+          <div class="ai-row" style="gap:8px;margin-top:8px;flex-wrap:wrap">
+            <div style="flex:1;min-width:140px">
+              <div class="ai-muted">Neuf</div>
+              <select class="ai-select" data-cond-neuf="${it.idx}">
+                <option value="non" ${normalizeCond(getCondForRef(initial).neuf, getCondForRef(initial).usite).neuf==="non"?"selected":""}>Non</option>
+                <option value="oui" ${normalizeCond(getCondForRef(initial).neuf, getCondForRef(initial).usite).neuf==="oui"?"selected":""}>Oui</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:140px">
+              <div class="ai-muted">Usité</div>
+              <select class="ai-select" data-cond-usite="${it.idx}">
+                <option value="non" ${normalizeCond(getCondForRef(initial).neuf, getCondForRef(initial).usite).usite==="non"?"selected":""}>Non</option>
+                <option value="oui" ${normalizeCond(getCondForRef(initial).neuf, getCondForRef(initial).usite).usite==="oui"?"selected":""}>Oui</option>
+              </select>
+            </div>
+          </div>
+
           <button class="ai-btn small ghost" data-apply="${it.idx}">Appliquer</button>
         </div>
       `;
@@ -1949,6 +1998,22 @@ if(draft){
       </div>
       <div class="ai-muted" id="ai-lot-hint" style="margin-top:8px"></div>
     `;
+
+    // Etat par objet (Neuf/Usité) : exclusif
+    right.querySelectorAll("select[data-cond-neuf]").forEach(sel=>{
+      sel.addEventListener("change", ()=>{
+        const idx = sel.getAttribute("data-cond-neuf");
+        const u = right.querySelector(`select[data-cond-usite="${idx}"]`);
+        if(sel.value==="oui" && u) u.value="non";
+      });
+    });
+    right.querySelectorAll("select[data-cond-usite]").forEach(sel=>{
+      sel.addEventListener("change", ()=>{
+        const idx = sel.getAttribute("data-cond-usite");
+        const n = right.querySelector(`select[data-cond-neuf="${idx}"]`);
+        if(sel.value==="oui" && n) n.value="non";
+      });
+    });
 
     wireCondUI();
 
@@ -2067,7 +2132,7 @@ if(draft){
           const blob = await (await fetch(d.it.cropUrl)).blob();
           const file2 = new File([blob], `crop_${d.it.idx}.jpg`, { type: blob.type || "image/jpeg" });
           await saveSample(d.ref, file2, d.it.emb);
-          emitConfirmed(d.ref, { score: d.score, method: d.auto ? "auto_lot" : "validated_lot", idx: d.it.idx, cond: readCondUI() });
+          emitConfirmed(d.ref, { score: d.score, method: d.auto ? "auto_lot" : "validated_lot", idx: d.it.idx, cond: normalizeCond((right.querySelector(`select[data-cond-neuf="${d.it.idx}"]`)?.value) || getCondForRef(d.ref).neuf, (right.querySelector(`select[data-cond-usite="${d.it.idx}"]`)?.value) || getCondForRef(d.ref).usite) });
         }
         toast("Lot compté.");
         $("#ai-lot-hint").textContent = "Terminé.";
@@ -2094,8 +2159,9 @@ if(draft){
     if (!cond) {
       // if UI present, read it; otherwise use stored value for this ref
       try{
-        const hasUI = !!($("#ai-cond-neuf") && $("#ai-cond-usite"));
-        cond = hasUI ? readCondUI() : normalizeCond(getCondForRef(r).neuf, getCondForRef(r).usite);
+        const nSel = right.querySelector(`select[data-cond-neuf="${it.idx}"]`);
+        const uSel = right.querySelector(`select[data-cond-usite="${it.idx}"]`);
+        cond = normalizeCond(nSel?.value || getCondForRef(r).neuf, uSel?.value || getCondForRef(r).usite);
       }catch(_){
         const c = getCondForRef(r);
         cond = normalizeCond(c.neuf, c.usite);
