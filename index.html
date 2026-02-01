@@ -386,6 +386,39 @@ function sanitizeRef(s){
   return (s || "").trim().replace(/\s+/g," ");
 }
 
+
+
+/* --------------------- Références unifiées (manuel + IA) --------------------- */
+function ensureAI(){
+  const ok = !!(window.AIRefAddon && typeof window.AIRefAddon.openScan === "function");
+  if(!ok){
+    alert("Module IA non chargé. Recharge la page ou désinstalle/réinstalle la PWA.");
+    return false;
+  }
+  return true;
+}
+
+// Ajoute/actualise une référence dans la liste locale (source: "manual" | "ai")
+function upsertRef(ref, source="manual"){
+  const r = sanitizeRef(ref);
+  if(!r) return null;
+  const refs = loadJSON(K.refs, []);
+  if(!refs.includes(r)){
+    refs.unshift(r);
+    saveJSON(K.refs, refs.slice(0,200));
+  }
+  // On ne stocke pas la provenance pour rester compatible (liste simple).
+  return r;
+}
+
+function rebuildRefSelect(){
+  const refSel = $("refSelect");
+  if(!refSel) return;
+  const refs = loadJSON(K.refs, []);
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+}
+
 /* --------------------- Tabs --------------------- */
 document.querySelectorAll(".tab").forEach(t => {
   t.addEventListener("click", () => {
@@ -506,43 +539,9 @@ $("btnAdd").addEventListener("click", () => {
   lines.push({ ref, qty, neufOui, usiteOui, comment });
   renderLines();
 
-  // auto-save reference if new
-  const refs = loadJSON(K.refs, []);
-  if(!refs.includes(ref)){
-    refs.unshift(ref);
-    saveJSON(K.refs, refs.slice(0,200));
-    // Menu déroulant des références
-  const refSel = $("refSelect");
-  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
-    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
-
-  // L’émetteur doit correspondre au magasin
-  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
-  // init: aligne au chargement
-  $("emetteur").value = $("magasin").value;
-
-  // Interrupteurs NEUF / USITÉ
-  function setNeuf(v){
-    const yes = (v === "oui");
-    $("neufOui").checked = yes; $("neufNon").checked = !yes;
-    $("neufSelect").value = v;
-    if(yes) setUsite("non");
-  }
-  function setUsite(v){
-    const yes = (v === "oui");
-    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
-    $("usiteSelect").value = v;
-    if(yes) setNeuf("non");
-  }
-  // valeurs par défaut
-  setNeuf("non");
-  setUsite("non");
-  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
-  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
-  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
-  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
-
-  }
+  // auto-save reference (unifié manuel + IA)
+  upsertRef(ref, "manual");
+  rebuildRefSelect();
 
   $("refSelect").selectedIndex = 0;
   $("qtyInput").value = "1";
@@ -551,6 +550,34 @@ $("btnAdd").addEventListener("click", () => {
   $("usiteSelect").value = "non";
 });
 
+
+
+/* --------------------- IA → Ajout automatique au bon + unification des références --------------------- */
+function addOrIncrementLine(ref, qty, neufOui, usiteOui, comment){
+  const r = sanitizeRef(ref);
+  if(!r) return;
+  const q = Math.max(1, parseInt(qty || 1, 10));
+  // Si une ligne identique existe (même ref + mêmes cases + même commentaire), on cumule la quantité
+  const existing = lines.find(l => l.ref === r && !!l.neufOui === !!neufOui && !!l.usiteOui === !!usiteOui && (l.comment || "") === (comment || ""));
+  if(existing) existing.qty += q;
+  else lines.push({ ref: r, qty: q, neufOui: !!neufOui, usiteOui: !!usiteOui, comment: comment || "" });
+  renderLines();
+}
+
+// Appelé par le module IA (photo simple ou lot). 1 appel = 1 objet compté.
+window.addReferenceFromAI = (ref, meta = {}) => {
+  const r = upsertRef(ref, "ai");
+  if(!r) return;
+  // rend la ref disponible en sélection manuelle immédiatement
+  rebuildRefSelect();
+
+  // on respecte l'état actuel NEUF/USITÉ (si l'utilisateur l'a sélectionné)
+  const neufOui = $("neufSelect")?.value === "oui";
+  const usiteOui = $("usiteSelect")?.value === "oui";
+
+  // comment: on laisse vide pour ne pas polluer le bon
+  addOrIncrementLine(r, 1, neufOui, usiteOui, "");
+};
 $("btnClearLine").addEventListener("click", () => {
   $("refSelect").selectedIndex = 0;
   $("qtyInput").value = "1";
@@ -840,8 +867,10 @@ $("btnClearHist").addEventListener("click", () => {
 });
 
 /* --------------------- Références --------------------- */
+
 async function renderRefs(){
-  const refs = loadJSON(K.refs, []);
+  // refs = liste unifiée (manuel + IA)
+  let refs = loadJSON(K.refs, []);
   const tbody = $("refsTable");
   tbody.innerHTML = "";
 
@@ -858,6 +887,17 @@ async function renderRefs(){
   let summary = {};
   if (window.AIRefAddon && typeof window.AIRefAddon.getRefSummary === "function") {
     try { summary = await window.AIRefAddon.getRefSummary(); } catch { summary = {}; }
+  }
+
+  // Unifie automatiquement les références IA dans la liste manuelle
+  const aiRefs = Object.keys(summary || {});
+  if (aiRefs.length) {
+    let changed = false;
+    for (const r of aiRefs) {
+      const rr = sanitizeRef(r);
+      if (rr && !refs.includes(rr)) { refs.push(rr); changed = true; }
+    }
+    if (changed) { saveJSON(K.refs, refs.slice(0,200)); rebuildRefSelect(); }
   }
 
   refs.forEach((r, idx) => {
@@ -893,10 +933,7 @@ async function renderRefs(){
       saveJSON(K.refs, refs2);
       renderRefs();
       // Menu déroulant des références (après ajout/suppression)
-      const refSel2 = $("refSelect");
-      const opts = `<option value="" disabled selected>Choisir une référence...</option>` +
-        refs2.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
-      refSel2.innerHTML = opts;
+      rebuildRefSelect();
     });
   });
 
@@ -913,50 +950,20 @@ async function renderRefs(){
   tbody.querySelectorAll(".aiThumbs").forEach(d => {
     d.addEventListener("click", () => {
       const ref = refs[Number(d.dataset.idx)];
-      openBase(ref);
+      if(!ensureAI()) return;
+      window.AIRefAddon.openBase(ref);
     });
   });
 
 }
-$("btnAddRef").addEventListener("click", () => {
+
+$("btnAddRef").addEventListener("click", async () => {
   const r = sanitizeRef($("newRef").value);
   if(!r) return;
-  const refs = loadJSON(K.refs, []);
-  if(!refs.includes(r)) refs.unshift(r);
-  saveJSON(K.refs, refs.slice(0,200));
+  upsertRef(r, "manual");
   $("newRef").value = "";
-  renderRefs();
-  // Menu déroulant des références
-  const refSel = $("refSelect");
-  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
-    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
-
-  // L’émetteur doit correspondre au magasin
-  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
-  // init: aligne au chargement
-  $("emetteur").value = $("magasin").value;
-
-  // Interrupteurs NEUF / USITÉ
-  function setNeuf(v){
-    const yes = (v === "oui");
-    $("neufOui").checked = yes; $("neufNon").checked = !yes;
-    $("neufSelect").value = v;
-    if(yes) setUsite("non");
-  }
-  function setUsite(v){
-    const yes = (v === "oui");
-    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
-    $("usiteSelect").value = v;
-    if(yes) setNeuf("non");
-  }
-  // valeurs par défaut
-  setNeuf("non");
-  setUsite("non");
-  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
-  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
-  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
-  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
-
+  rebuildRefSelect();
+  await renderRefs();
 });
 
 /* --------------------- Magasins --------------------- */
@@ -1008,6 +1015,17 @@ if("serviceWorker" in navigator){
 /* --------------------- Boot --------------------- */
 initData();
 $("date").value = todayISO();
+
+// Sync des références IA (base photos) vers la liste manuelle, dès que le module IA est chargé
+setTimeout(async () => {
+  try {
+    if (window.AIRefAddon && typeof window.AIRefAddon.getRefSummary === "function") {
+      const sum = await window.AIRefAddon.getRefSummary();
+      Object.keys(sum || {}).forEach(r => upsertRef(r, "ai"));
+      rebuildRefSelect();
+    }
+  } catch {}
+}, 1200);
 
 // restore draft if exists
 const draft = loadJSON(K.draft, null);
@@ -1821,6 +1839,11 @@ if(draft){
     const thumb = await fileToThumbDataURL(file);
     const sample = { ref, embedding: Array.from(embedding), thumb, createdAt: Date.now() };
     await dbPut(sample);
+    // Unifie la référence IA dans la liste manuelle de l'app
+    try {
+      if (typeof window.upsertRef === "function") window.upsertRef(ref, "ai");
+      if (typeof window.rebuildRefSelect === "function") window.rebuildRefSelect();
+    } catch {}
   }
 
   function emitConfirmed(ref, meta) {

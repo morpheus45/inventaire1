@@ -1,6 +1,6 @@
 // Bump version whenever files change to force PWA update
 // (IMPORTANT: ne liste ici que des fichiers qui existent réellement, sinon l'installation du SW échoue.)
-const CACHE_NAME = "inventaire-pwa-v9";
+const CACHE_NAME = "inventaire-pwa-v10";
 const ASSETS = [
   "./",
   "./index.html",
