@@ -1245,12 +1245,14 @@ if(draft){
       .ai-fab-wrap{position:fixed;right:${CONFIG.ui.fabRight}px;bottom:${CONFIG.ui.fabBottom}px;z-index:99999;display:flex;flex-direction:column;gap:10px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
       .ai-fab{border:none;border-radius:999px;padding:12px 14px;box-shadow:0 8px 20px rgba(0,0,0,.22);background:#111827;color:#fff;font-weight:800;font-size:14px;display:flex;align-items:center;gap:8px;cursor:pointer}
       .ai-fab.secondary{background:#374151}
-      .ai-modal{position:fixed;inset:0;z-index:999999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);padding:16px}
-      .ai-card{width:min(920px,100%);background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden}
-      .ai-card header{padding:14px 16px;background:#f3f4f6;display:flex;align-items:center;justify-content:space-between}
+      /* Modal: sur mobile, le contenu était coupé en bas (impossible de scroller).
+         On rend le modal scrollable + la carte flexible en hauteur. */
+      .ai-modal{position:fixed;inset:0;z-index:999999;display:none;align-items:flex-start;justify-content:center;background:rgba(0,0,0,.5);padding:16px;overflow:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(16px + env(safe-area-inset-bottom));}
+      .ai-card{width:min(920px,100%);background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden;max-height:calc(100dvh - 32px - env(safe-area-inset-bottom));display:flex;flex-direction:column;}
+      .ai-card header{padding:14px 16px;background:#f3f4f6;display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
       .ai-card header h3{margin:0;font-size:16px}
       .ai-card header button{border:none;background:transparent;font-size:22px;cursor:pointer;line-height:1}
-      .ai-card .body{padding:16px;display:grid;grid-template-columns:1fr;gap:14px}
+      .ai-card .body{padding:16px;display:grid;grid-template-columns:1fr;gap:14px;overflow:auto;-webkit-overflow-scrolling:touch;flex:1 1 auto}
       @media(min-width:920px){.ai-card .body{grid-template-columns:320px 1fr}}
       .ai-thumb{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;background:#e5e7eb}
       .ai-actions{display:flex;flex-direction:column;gap:10px}
@@ -1260,7 +1262,7 @@ if(draft){
       .ai-row{display:flex;gap:10px;flex-wrap:wrap}
       .ai-input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:12px;font-size:14px}
       .ai-muted{color:#6b7280;font-size:13px}
-      .ai-list{max-height:420px;overflow:auto;border:1px solid #e5e7eb;border-radius:12px}
+      .ai-list{max-height:min(420px, 45dvh);overflow:auto;border:1px solid #e5e7eb;border-radius:12px;-webkit-overflow-scrolling:touch}
       .ai-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e5e7eb;gap:10px}
       .ai-item:last-child{border-bottom:none}
       .ai-badge{font-size:12px;background:#eef2ff;color:#3730a3;border-radius:999px;padding:2px 8px;font-weight:800}

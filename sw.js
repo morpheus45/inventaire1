@@ -1,12 +1,13 @@
 // Bump version whenever files change to force PWA update
-const CACHE_NAME = "inventaire-pwa-v8-ai4|v6";
+// (IMPORTANT: ne liste ici que des fichiers qui existent réellement, sinon l'installation du SW échoue.)
+const CACHE_NAME = "inventaire-pwa-v9";
 const ASSETS = [
   "./",
   "./index.html",
+  "./bon_retour_stock_app.html",
   "./manifest.webmanifest",
   "./icon-192.png",
-  "./icon-512.png",
-  "./ai.js"
+  "./icon-512.png"
 ];
 
 // Install: pre-cache core assets
