@@ -2510,6 +2510,9 @@ $("#ai-lot-hint").innerHTML = `<span class="ai-spinner"></span> Enregistrement +
   }
 
   function init(){
+    // Ensure IA core UI (modal + file inputs) is injected.
+    // Even if we no longer use the floating FAB buttons, we still need the modal.
+    try { injectUI(); } catch(e) { console.error('IA injectUI failed', e); }
     bindInlineButtons();
     window.addEventListener("keydown", (e) => { if (e.altKey && (e.key === "i" || e.key === "I")) openScanModal(); });
   }
