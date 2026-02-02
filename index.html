@@ -286,6 +286,27 @@
       </div>
       <div class="hint" style="margin-top:6px">Les références sont enregistrées localement (sur cet appareil).</div>
 
+      <div class="card" style="box-shadow:none;padding:12px;border-radius:16px;margin-top:10px;border:1px solid var(--border)">
+        <div style="font-weight:800;margin-bottom:6px">☁️ Sauvegarde Google Drive (auto)</div>
+        <div class="hint">Nécessite un Google Apps Script (Web App). Colle ici l’URL du Web App puis utilise “Sauvegarder” / “Restaurer”.</div>
+        <div class="row" style="margin-top:10px">
+          <div style="grid-column:1 / -1">
+            <label>URL du Web App Apps Script</label>
+            <input id="driveScriptUrl" placeholder="https://script.google.com/macros/s/XXXXX/exec" />
+            <div class="hint" style="margin-top:8px">Optionnel : ajoute un “jeton secret” pour éviter qu’un tiers écrase tes sauvegardes.</div>
+            <label style="margin-top:8px">Jeton secret</label>
+            <input id="driveToken" placeholder="ex: 8f3c-... (à mettre aussi dans Apps Script)" />
+          </div>
+        </div>
+        <div class="btns" style="margin-top:10px">
+          <button class="ghost" id="btnDrivePing">🧪 Tester</button>
+          <button class="success" id="btnDriveSave">💾 Sauvegarder sur Drive</button>
+          <button class="primary" id="btnDriveLoad">⬇️ Restaurer depuis Drive</button>
+        </div>
+        <div class="hint" id="driveStatus" style="margin-top:8px"></div>
+      </div>
+
+
       <!-- IA : accès rapide (si le module IA est présent) -->
       <div class="btns" id="iaRefsBtns" style="margin-top:10px; display:none">
         <button class="ghost" id="btnIAOpenScan">🤖 IA photo (détection)</button>
@@ -337,7 +358,9 @@ const K = {
   emit: "inv_emit_v1",
   draft: "inv_draft_v1",
   hist: "inv_hist_v1",
-  seq: "inv_bon_seq_v1"
+  seq: "inv_bon_seq_v1",
+  driveUrl: "inv_drive_script_url_v1",
+  driveToken: "inv_drive_token_v1"
 };
 
 const DEFAULT_EMETTEURS = [
@@ -1140,6 +1163,158 @@ $("btnAddRef").addEventListener("click", () => {
 
 });
 
+
+
+/* --------------------- Google Drive Sync (Apps Script Web App) --------------------- */
+/*
+  Cette synchro nécessite un Google Apps Script déployé en "Web app".
+  L’URL ressemble à : https://script.google.com/macros/s/XXXXX/exec
+*/
+function setDriveStatus(msg){
+  const el = $("driveStatus");
+  if(el) el.textContent = msg || "";
+}
+function getDriveUrl(){
+  const v = ( $("driveScriptUrl")?.value || localStorage.getItem(K.driveUrl) || "" ).trim();
+  return v;
+}
+function getDriveToken(){
+  const v = ( $("driveToken")?.value || localStorage.getItem(K.driveToken) || "" ).trim();
+  return v;
+}
+function saveDriveToken(v){
+  try{ localStorage.setItem(K.driveToken, String(v||"").trim()); }catch(_){ }
+}
+function saveDriveUrl(v){
+  try{ localStorage.setItem(K.driveUrl, String(v||"").trim()); }catch(_){}
+}
+async function drivePing(){
+  const url = getDriveUrl();
+  if(!url){ setDriveStatus("❌ Colle d’abord l’URL Apps Script."); return false; }
+  saveDriveUrl(url);
+  setDriveStatus("⏳ Test en cours…");
+  try{
+    const token = encodeURIComponent(getDriveToken()||"");
+    const r = await fetch(url + "?action=ping" + (token?("&token="+token):""), { method:"GET", cache:"no-store" });
+    const j = await r.json();
+    if(j && j.ok){ setDriveStatus("✅ OK : connexion Drive prête."); return true; }
+    setDriveStatus("⚠️ Réponse inattendue du script.");
+    return false;
+  }catch(e){
+    console.error(e);
+    setDriveStatus("❌ Impossible de joindre le script (réseau/CORS/URL).");
+    return false;
+  }
+}
+
+async function buildBackupPayload(){
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    refs: loadJSON(K.refs, []),
+    mags: loadJSON(K.mags, []),
+    emit: loadJSON(K.emit, []),
+    aiPrefs: (function(){ try{ return JSON.parse(localStorage.getItem("inv_ai_prefs_v1")||"{}")||{}; }catch(_){ return {}; } })(),
+    aiBase: null
+  };
+
+  if(window.AIRefAddon && typeof window.AIRefAddon.exportData === "function"){
+    try{ payload.aiBase = await window.AIRefAddon.exportData(); }
+    catch(e){ console.warn("AI exportData failed", e); payload.aiBase = null; }
+  }
+  return payload;
+}
+
+async function driveSave(){
+  const url = getDriveUrl();
+  if(!url){ setDriveStatus("❌ Colle d’abord l’URL Apps Script."); return; }
+  saveDriveUrl(url);
+
+  setDriveStatus("⏳ Préparation de la sauvegarde…");
+  let data;
+  try{ data = await buildBackupPayload(); }
+  catch(e){ console.error(e); setDriveStatus("❌ Erreur préparation sauvegarde."); return; }
+
+  setDriveStatus("⏳ Envoi vers Google Drive…");
+  try{
+    const r = await fetch(url, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ action:"save", token: (getDriveToken()||""), data })
+    });
+    const j = await r.json();
+    if(j && j.ok){ setDriveStatus("✅ Sauvegarde Drive effectuée."); return; }
+    setDriveStatus("⚠️ Sauvegarde : réponse inattendue.");
+  }catch(e){
+    console.error(e);
+    setDriveStatus("❌ Sauvegarde impossible (réseau/CORS/URL).");
+  }
+}
+
+async function driveLoad(){
+  const url = getDriveUrl();
+  if(!url){ setDriveStatus("❌ Colle d’abord l’URL Apps Script."); return; }
+  saveDriveUrl(url);
+
+  if(!confirm("Restaurer depuis Drive ? Cela remplacera tes références/magasins locaux (et la base IA si présente).")) return;
+
+  setDriveStatus("⏳ Téléchargement depuis Drive…");
+  let j;
+  try{
+    const token = encodeURIComponent(getDriveToken()||"");
+    const r = await fetch(url + "?action=load" + (token?("&token="+token):""), { method:"GET", cache:"no-store" });
+    j = await r.json();
+  }catch(e){
+    console.error(e);
+    setDriveStatus("❌ Impossible de lire la sauvegarde (réseau/CORS/URL).");
+    return;
+  }
+
+  if(!j || !j.ok || !j.data){ setDriveStatus("⚠️ Aucune sauvegarde valide trouvée."); return; }
+  const data = j.data;
+
+  try{
+    if(Array.isArray(data.refs)) saveJSON(K.refs, data.refs);
+    if(Array.isArray(data.mags)) saveJSON(K.mags, data.mags);
+    if(Array.isArray(data.emit)) saveJSON(K.emit, data.emit);
+    if(data.aiPrefs) localStorage.setItem("inv_ai_prefs_v1", JSON.stringify(data.aiPrefs));
+
+    if(data.aiBase && window.AIRefAddon && typeof window.AIRefAddon.importData === "function"){
+      setDriveStatus("⏳ Restauration base IA (peut prendre un moment)…");
+      await window.AIRefAddon.importData(data.aiBase, {
+        replace:true,
+        onProgress:(n,total)=>{ setDriveStatus(`⏳ Restauration base IA : ${n}/${total}`); }
+      });
+    }
+
+    await renderRefs();
+    renderMags();
+    fillBasics();
+    setDriveStatus("✅ Restauration terminée.");
+  }catch(e){
+    console.error(e);
+    setDriveStatus("❌ Erreur pendant la restauration.");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const inp = $("driveScriptUrl");
+  const tok = $("driveToken");
+  if(inp){
+    const saved = localStorage.getItem(K.driveUrl) || "";
+    if(saved) inp.value = saved;
+    inp.addEventListener("change", ()=> saveDriveUrl(inp.value));
+  }
+  if(tok){
+    const savedT = localStorage.getItem(K.driveToken) || "";
+    if(savedT) tok.value = savedT;
+    tok.addEventListener("change", ()=> saveDriveToken(tok.value));
+  }
+  $("btnDrivePing")?.addEventListener("click", drivePing);
+  $("btnDriveSave")?.addEventListener("click", driveSave);
+  $("btnDriveLoad")?.addEventListener("click", driveLoad);
+});
+
 /* --------------------- Magasins --------------------- */
 function renderMags(){
   const mags = loadJSON(K.mags, []);
@@ -1256,10 +1431,22 @@ if(draft){
       maxSide: 1280,
       // background segmentation parameters
       bgDelta: 16,
-      minAreaRatio: 0.006, // min blob area = 1% of image
+      minAreaRatio: 0.006, // min blob area ~0.6% of image
       maxAreaRatio: 0.65,
       padRatio: 0.08,
+
+      // Morphology:
+      // - closing fills holes but can merge nearby objects
+      // - opening helps split objects connected by thin bridges/shadows
       morphRadius: 2,
+      openRadius: 1,
+
+      // If a detected box is "too big" (often a cluster), try to split it by re-running
+      // detection on the crop with stricter parameters.
+      splitLargeBoxes: true,
+      largeAreaRatio: 0.18,   // box area > 18% of image => attempt split
+      splitPasses: 1,
+      deltaBoost: 10
     }
   };
 
@@ -1868,8 +2055,9 @@ if(draft){
     return boxes;
   }
 
-  function detectBoxesFromImage(img) {
-    const { canvas, w, h } = resizeToMaxSide(img, CONFIG.multi.maxSide);
+  function detectBoxesFromImage(img, opts = {}) {
+    const cfg = Object.assign({}, CONFIG.multi, opts || {});
+    const { canvas, w, h } = resizeToMaxSide(img, cfg.maxSide);
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     const imgData = ctx.getImageData(0,0,w,h);
     const data = imgData.data;
@@ -1887,13 +2075,14 @@ if(draft){
         }
       }
       diffs.sort((a,b)=>a-b);
-      const p75 = diffs.length ? diffs[Math.floor(diffs.length * 0.75)] : CONFIG.multi.bgDelta;
+      const p75 = diffs.length ? diffs[Math.floor(diffs.length * 0.75)] : cfg.bgDelta;
       // keep a safe minimum to avoid noise
-      const d = Math.max(CONFIG.multi.bgDelta, Math.min(70, Math.max(10, p75)));
+      const d = Math.max(cfg.bgDelta, Math.min(70, Math.max(10, p75)));
       return d;
     })();
-    const mask = new Uint8Array(w*h);
 
+    // foreground mask: pixels far from estimated background
+    const mask = new Uint8Array(w*h);
     for (let y=0; y<h; y++) {
       for (let x=0; x<w; x++) {
         const i = (y*w + x)*4;
@@ -1902,22 +2091,33 @@ if(draft){
       }
     }
 
-    // morphological closing to fill holes: dilate then erode
-    const r = CONFIG.multi.morphRadius;
-    const dil = morphDilate(mask, w, h, r);
-    const clo = morphErode(dil, w, h, r);
+    // Morphology:
+    // 1) opening (erode->dilate) helps split objects connected by thin bridges (shadows, grout lines)
+    // 2) closing (dilate->erode) fills holes inside objects
+    const openR = Math.max(0, cfg.openRadius|0);
+    let m = mask;
+    if (openR > 0){
+      const er = morphErode(m, w, h, openR);
+      m = morphDilate(er, w, h, openR);
+    }
 
-    const comps = connectedComponents(clo, w, h);
+    const closeR = Math.max(0, cfg.morphRadius|0);
+    if (closeR > 0){
+      const dil = morphDilate(m, w, h, closeR);
+      m = morphErode(dil, w, h, closeR);
+    }
 
-    const minA = w*h*CONFIG.multi.minAreaRatio;
-    const maxA = w*h*CONFIG.multi.maxAreaRatio;
+    const comps = connectedComponents(m, w, h);
+
+    const minA = w*h*cfg.minAreaRatio;
+    const maxA = w*h*cfg.maxAreaRatio;
 
     let boxes = comps
       .filter(b => b.area >= minA && b.area <= maxA)
       .filter(b => b.w > 24 && b.h > 24)
       .map(b => {
         // padding
-        const pad = Math.round(Math.max(b.w, b.h) * CONFIG.multi.padRatio);
+        const pad = Math.round(Math.max(b.w, b.h) * cfg.padRatio);
         const x = Math.max(0, b.x - pad);
         const y = Math.max(0, b.y - pad);
         const x2 = Math.min(w, b.x + b.w + pad);
@@ -1925,7 +2125,7 @@ if(draft){
         return { x, y, w: x2-x, h: y2-y, area: b.area };
       });
 
-    // merge overlapping boxes
+    // merge overlapping boxes (avoid duplicates)
     function iou(a,b){
       const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y);
       const x2=Math.min(a.x+a.w,b.x+b.w), y2=Math.min(a.y+a.h,b.y+b.h);
@@ -1940,7 +2140,6 @@ if(draft){
       let keep=true;
       for (let k=0;k<merged.length;k++){
         if (iou(b, merged[k]) > 0.35){
-          // merge into merged[k]
           const m=merged[k];
           const nx=Math.min(m.x,b.x), ny=Math.min(m.y,b.y);
           const nx2=Math.max(m.x+m.w,b.x+b.w), ny2=Math.max(m.y+m.h,b.y+b.h);
@@ -1950,6 +2149,53 @@ if(draft){
         }
       }
       if (keep) merged.push({x:b.x,y:b.y,w:b.w,h:b.h});
+    }
+
+    // attempt to split large cluster boxes (common when multiple items are close)
+    if (cfg.splitLargeBoxes){
+      const maxPass = Math.max(0, cfg.splitPasses|0);
+      let current = merged.slice();
+      for (let pass=0; pass<maxPass; pass++){
+        let changed = false;
+        const next = [];
+        for (const b of current){
+          const area = b.w*b.h;
+          const isLarge = area > (w*h*cfg.largeAreaRatio);
+          if (!isLarge){
+            next.push(b);
+            continue;
+          }
+
+          // crop and re-run with stricter params
+          const crop = makeCanvas(b.w, b.h);
+          crop.getContext("2d", { willReadFrequently: true }).drawImage(canvas, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+
+          const sub = detectBoxesFromImage(crop, {
+            // stricter to separate close items
+            bgDelta: cfg.bgDelta + (cfg.deltaBoost|0),
+            minAreaRatio: Math.max(0.0015, cfg.minAreaRatio * 0.45),
+            maxAreaRatio: 0.9,
+            padRatio: Math.max(0.05, cfg.padRatio * 0.8),
+            morphRadius: Math.max(0, (cfg.morphRadius|0) - 1),
+            openRadius: Math.min(2, Math.max(1, (cfg.openRadius|0) + 1)),
+            splitLargeBoxes: false
+          });
+
+          if (sub.boxes && sub.boxes.length >= 2){
+            // map back to global coords
+            for (const s of sub.boxes){
+              next.push({ x: b.x + s.x, y: b.y + s.y, w: s.w, h: s.h });
+            }
+            changed = true;
+          }else{
+            next.push(b);
+          }
+        }
+        current = next;
+        if (!changed) break;
+      }
+      merged.length = 0;
+      merged.push(...current);
     }
 
     // Sort left-to-right, top-to-bottom
@@ -2545,7 +2791,61 @@ $("#ai-lot-hint").innerHTML = `<span class="ai-spinner"></span> Enregistrement +
     return true;
   }
 
-window.AIRefAddon = { openScan: openScanModal, openBase: openBaseModal, addPhotoForRef, getRefSummary, renameRef };
+
+  async function exportData(){
+    const all = await dbGetAll();
+    return {
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      samples: (all||[]).map(s => ({ ref: s.ref, createdAt: s.createdAt, thumb: s.thumb }))
+    };
+  }
+
+  async function clearDB(){
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CONFIG.db.store, "readwrite");
+      const req = tx.objectStore(CONFIG.db.store).clear();
+      req.onsuccess = ()=> resolve(true);
+      req.onerror = ()=> reject(req.error);
+      tx.oncomplete = ()=> db.close();
+    });
+  }
+
+  function dataURLToImage(dataUrl){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = ()=> resolve(img);
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+  }
+
+  async function importData(exportData, opts){
+    const o = opts || {};
+    const replace = ("replace" in o) ? !!o.replace : true;
+    const onProgress = (typeof o.onProgress === "function") ? o.onProgress : null;
+
+    if(!exportData || !Array.isArray(exportData.samples)) throw new Error("Invalid aiBase format");
+    if(replace) await clearDB();
+
+    await ensureModel();
+
+    const samples = exportData.samples;
+    let n = 0;
+    for(const s of samples){
+      if(!s || !s.thumb || !s.ref) continue;
+      const img = await dataURLToImage(s.thumb);
+      const emb = await imageToEmbedding(img);
+      const sample = { ref: s.ref, embedding: Array.from(emb), thumb: s.thumb, createdAt: s.createdAt || Date.now() };
+      await dbPut(sample);
+      n++;
+      if(onProgress) onProgress(n, samples.length);
+    }
+    return { imported: n, total: samples.length };
+  }
+
+window.AIRefAddon = { openScan: openScanModal, openBase: openBaseModal, addPhotoForRef, getRefSummary, renameRef , exportData, importData };
 })();
 </script>
 </body>
