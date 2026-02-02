@@ -110,6 +110,12 @@
 .switch input:checked + .slider{ background:#2563eb; }
 .switch input:checked + .slider:before{ transform:translateX(20px); }
 
+
+/* IA buttons inline (non flottants) */
+.ia-actions-inline{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0 0;}
+.btn-ia-inline{width:100%;padding:14px 14px;border-radius:18px;border:0;font-weight:800;font-size:18px;box-shadow:0 8px 18px rgba(0,0,0,.08);background:#0f172a;color:#fff;cursor:pointer;}
+.btn-ia-inline.secondary{background:#374151;}
+@media (max-width:420px){.btn-ia-inline{font-size:16px;padding:12px 12px;}}
 /* IA thumbs in Références */
 .ref-thumb{
   width:52px;height:52px;
@@ -207,6 +213,11 @@
 
 <label>Commentaire (optionnel)</label>
           <input id="commentInput" placeholder="Ex: HS, retour, etc." />
+        </div>
+
+        <div id="aiButtonsSlot" class="ia-actions-inline">
+          <button type="button" id="btnAiPhotoInline" class="btn-ia-inline">🤖 IA photo</button>
+          <button type="button" id="btnAiBaseInline" class="btn-ia-inline secondary">📚 Base IA</button>
         </div>
 
         <div class="btns" style="margin-top:12px">
@@ -972,6 +983,8 @@ async function renderRefs(){
       </td>
       <td class="right">
         <button class="ghost small" data-iaref="${idx}">📷 IA</button>
+        <button class="ghost small" data-redit="${idx}">✏️ Modifier</button>
+        <button class="ghost small" data-rphoto="${idx}">🖼️ Photo</button>
         <button class="danger small" data-rdel="${idx}">Supprimer</button>
       </td>`;
     tbody.appendChild(tr);
@@ -999,7 +1012,76 @@ async function renderRefs(){
     });
   });
 
-  // Open IA base on a specific reference
+  
+  // Edit ref (rename) + keep AI base in sync if possible
+  tbody.querySelectorAll("button[data-redit]").forEach(b => {
+    b.addEventListener("click", async () => {
+      const refs2 = loadJSON(K.refs, []);
+      const i = Number(b.dataset.redit);
+      const oldRef = refs2[i];
+      if(!oldRef) return;
+
+      const newRefRaw = prompt(`Modifier la référence :`, oldRef);
+      const newRef = sanitizeRef(newRefRaw);
+      if(!newRef) return;
+
+      // prevent duplicates
+      const already = refs2.some((r, idx) => idx!==i && sanitizeRef(r) === newRef);
+      if(already){ alert("Cette référence existe déjà."); return; }
+
+      // rename in list
+      refs2[i] = newRef;
+      saveJSON(K.refs, refs2);
+
+      // rename in AI prefs map (Neuf/Usité)
+      try{
+        const key = "inv_ai_prefs_v1";
+        const p = JSON.parse(localStorage.getItem(key) || "{}") || {};
+        p.perRef = p.perRef || {};
+        const kOld = canonRef(oldRef);
+        const kNew = canonRef(newRef);
+        if (p.perRef[kOld] && !p.perRef[kNew]) p.perRef[kNew] = p.perRef[kOld];
+        delete p.perRef[kOld];
+        localStorage.setItem(key, JSON.stringify(p));
+      }catch(_){}
+
+      // rename in AI base (IndexedDB) if addon exposes it
+      try{
+        if(window.AIRefAddon && typeof window.AIRefAddon.renameRef === "function"){
+          await window.AIRefAddon.renameRef(oldRef, newRef);
+        }
+      }catch(e){ console.warn("renameRef AI base failed", e); }
+
+      renderRefs();
+
+      // refresh select
+      const refSel2 = $("refSelect");
+      const opts = `<option value="" disabled selected>Choisir une référence...</option>` +
+        refs2.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+      refSel2.innerHTML = opts;
+    });
+  });
+
+  // Add/replace photo for a ref (quick)
+  tbody.querySelectorAll("button[data-rphoto]").forEach(b => {
+    b.addEventListener("click", async () => {
+      const refs2 = loadJSON(K.refs, []);
+      const i = Number(b.dataset.rphoto);
+      const ref = refs2[i];
+      if(!ref) return;
+      if(!ensureAI()) return;
+      try{
+        // Add a photo sample; thumb updates automatically in list
+        await window.AIRefAddon.addPhotoForRef(ref);
+        renderRefs();
+      }catch(e){
+        console.error(e);
+        alert("Erreur lors de l’ajout de photo IA.");
+      }
+    });
+  });
+
+// Open IA base on a specific reference
   tbody.querySelectorAll("button[data-iaref]").forEach(b => {
     b.addEventListener("click", async () => {
       if (!ensureAI() || typeof window.AIRefAddon.addPhotoForRef !== "function") { return; }
@@ -1173,8 +1255,8 @@ if(draft){
     multi: {
       maxSide: 1280,
       // background segmentation parameters
-      bgDelta: 18,
-      minAreaRatio: 0.010, // min blob area = 1% of image
+      bgDelta: 16,
+      minAreaRatio: 0.006, // min blob area = 1% of image
       maxAreaRatio: 0.65,
       padRatio: 0.08,
       morphRadius: 2,
@@ -1445,7 +1527,7 @@ if(draft){
       /* Modal: sur mobile, le contenu était coupé en bas (impossible de scroller).
          On rend le modal scrollable + la carte flexible en hauteur. */
       .ai-modal{position:fixed;inset:0;z-index:999999;display:none;align-items:flex-start;justify-content:center;background:rgba(0,0,0,.5);padding:16px;overflow:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(16px + env(safe-area-inset-bottom));}
-      .ai-card{width:min(920px,100%);background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden;max-height:calc(100dvh - 32px - env(safe-area-inset-bottom));display:flex;flex-direction:column;}
+      .ai-card{width:min(920px,100%);transform:none !important;background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden;max-height:calc(100dvh - 32px - env(safe-area-inset-bottom));display:flex;flex-direction:column;}
       .ai-card header{padding:14px 16px;background:#f3f4f6;display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
       .ai-card header h3{margin:0;font-size:16px}
       .ai-card header button{border:none;background:transparent;font-size:22px;cursor:pointer;line-height:1}
@@ -1468,7 +1550,7 @@ if(draft){
       .ai-spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(0,0,0,.2);border-top-color:rgba(0,0,0,.6);border-radius:50%;animation:ai-spin 0.8s linear infinite}
       @keyframes ai-spin{to{transform:rotate(360deg)}}
       .ai-kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;background:#f3f4f6;border-radius:8px;padding:2px 6px;font-size:12px}
-      .ai-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+      .ai-grid{display:grid;overflow:visible !important;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
       @media(min-width:720px){.ai-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
       .ai-tile{border:1px solid #e5e7eb;border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:8px}
       .ai-tile.off{opacity:.45;filter:grayscale(.35)}
@@ -1793,7 +1875,23 @@ if(draft){
     const data = imgData.data;
 
     const bg = estimateBackgroundGray(data, w, h);
-    const delta = CONFIG.multi.bgDelta;
+    const delta = (function(){
+      // adaptive threshold based on image content (helps on tiled floors / variable light)
+      const diffs = [];
+      const step2 = Math.max(1, Math.floor(Math.min(w,h) / 180));
+      for (let yy=0; yy<h; yy+=step2){
+        for (let xx=0; xx<w; xx+=step2){
+          const ii = (yy*w + xx)*4;
+          const gg = data[ii]*0.299 + data[ii+1]*0.587 + data[ii+2]*0.114;
+          diffs.push(Math.abs(gg - bg));
+        }
+      }
+      diffs.sort((a,b)=>a-b);
+      const p75 = diffs.length ? diffs[Math.floor(diffs.length * 0.75)] : CONFIG.multi.bgDelta;
+      // keep a safe minimum to avoid noise
+      const d = Math.max(CONFIG.multi.bgDelta, Math.min(70, Math.max(10, p75)));
+      return d;
+    })();
     const mask = new Uint8Array(w*h);
 
     for (let y=0; y<h; y++) {
@@ -2125,7 +2223,23 @@ if(draft){
       }
 
       // save samples + emit counts
-      $("#ai-lot-hint").innerHTML = `<span class="ai-spinner"></span> Enregistrement + comptage…`;
+      
+      // Résumé avant validation (permet de corriger avant d'appliquer)
+      const counts = {};
+      for (const d of decisions) counts[d.ref] = (counts[d.ref]||0) + 1;
+      const summaryLines = Object.keys(counts).sort((a,b)=>a.localeCompare(b,"fr"))
+        .map(k => `- ${k} x${counts[k]}`).join("\n");
+      const ok = confirm(`Résumé du lot (avant validation) :
+
+${summaryLines}
+
+OK = appliquer au bon / Annuler = revenir corriger`);
+      if(!ok){
+        $("#ai-lot-hint").textContent = "Annulé : corrige les objets puis valide à nouveau.";
+        return;
+      }
+
+$("#ai-lot-hint").innerHTML = `<span class="ai-spinner"></span> Enregistrement + comptage…`;
       try {
         for (const d of decisions){
           // save sample from crop as thumbnail + embedding
@@ -2377,14 +2491,58 @@ if(draft){
     return out;
   }
 
-  function init() {
-    injectUI();
+  function bindInlineButtons(){
+    // Prefer inline buttons in the bon form (non flottants)
+    const bPhoto = document.getElementById("btnAiPhotoInline");
+    const bBase  = document.getElementById("btnAiBaseInline");
+    if (bPhoto && !bPhoto._aiBound){
+      bPhoto._aiBound = true;
+      bPhoto.addEventListener("click", () => openScanModal());
+    }
+    if (bBase && !bBase._aiBound){
+      bBase._aiBound = true;
+      bBase.addEventListener("click", () => openBaseModal());
+    }
+
+    // If older floating UI exists from previous versions, hide it
+    const oldFab = document.getElementById("ai-fab-wrap");
+    if (oldFab) oldFab.style.display = "none";
+  }
+
+  function init(){
+    bindInlineButtons();
     window.addEventListener("keydown", (e) => { if (e.altKey && (e.key === "i" || e.key === "I")) openScanModal(); });
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 
-  window.AIRefAddon = { openScan: openScanModal, openBase: openBaseModal, addPhotoForRef, getRefSummary };
+  
+  async function dbPutExisting(sample) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(CONFIG.db.store, "readwrite");
+      tx.objectStore(CONFIG.db.store).put(sample).onsuccess = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function renameRef(oldRef, newRef){
+    const o = canonRef(oldRef);
+    const n = canonRef(newRef);
+    if(!o || !n) return false;
+    const db = await openDB();
+    // get all via index "ref" requires exact ref string, but we rename by canonical match
+    const all = await dbGetAll();
+    const toUpd = all.filter(s => canonRef(s.ref) === o);
+    if(!toUpd.length) return true;
+    for (const s of toUpd){
+      s.ref = newRef;
+      await dbPutExisting(s);
+    }
+    return true;
+  }
+
+window.AIRefAddon = { openScan: openScanModal, openBase: openBaseModal, addPhotoForRef, getRefSummary, renameRef };
 })();
 </script>
 </body>
