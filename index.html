@@ -970,8 +970,28 @@ async function renderRefs(){
       // auto validate line if requested (default true for IA)
       const autoAdd = meta && ("autoAdd" in meta) ? !!meta.autoAdd : true;
       if(autoAdd){
-        const btn = document.getElementById("btnAdd");
-        if(btn) btn.click();
+        // NOTE: programmatic click can be ignored on some mobile contexts;
+        // we directly call the same logic as the "Valider l’article" button.
+        const refVal = sanitizeRef(document.getElementById("refSelect")?.value);
+        if(refVal){
+          const qty = Math.max(1, parseInt(document.getElementById("qtyInput")?.value || "1", 10));
+          const neufOui2 = (document.getElementById("neufSelect")?.value === "oui");
+          const usiteOui2 = (document.getElementById("usiteSelect")?.value === "oui");
+          const comment = sanitizeRef(document.getElementById("commentInput")?.value);
+          try{
+            // "lines" + "renderLines" are globals in this page.
+            lines.push({ ref: refVal, qty, neufOui: neufOui2, usiteOui: usiteOui2, comment });
+            renderLines();
+          }catch(_){
+            // fallback to click
+            const btn = document.getElementById("btnAdd");
+            if(btn) btn.click();
+          }
+
+          // Close IA modal if still open
+          const m = document.getElementById("ai-modal");
+          if(m) m.style.display = "none";
+        }
       }
     }catch(e){
       console.error("addReferenceFromAI error", e);
