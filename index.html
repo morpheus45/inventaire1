@@ -328,24 +328,32 @@
       </div>
       <div class="hint" style="margin-top:6px">Les références sont enregistrées localement (sur cet appareil).</div>
 
-      <div class="card" style="box-shadow:none;padding:12px;border-radius:16px;margin-top:10px;border:1px solid var(--border)">
-        <div style="font-weight:800;margin-bottom:6px">☁️ Sauvegarde Google Drive (auto)</div>
-        <div class="hint">Nécessite un Google Apps Script (Web App). Colle ici l’URL du Web App puis utilise “Sauvegarder” / “Restaurer”.</div>
-        <div class="row" style="margin-top:10px">
-          <div style="grid-column:1 / -1">
-            <label>URL du Web App Apps Script</label>
-            <input id="driveScriptUrl" placeholder="https://script.google.com/macros/s/XXXXX/exec" />
-            <div class="hint" style="margin-top:8px">Optionnel : ajoute un “jeton secret” pour éviter qu’un tiers écrase tes sauvegardes.</div>
-            <label style="margin-top:8px">Jeton secret</label>
-            <input id="driveToken" placeholder="ex: 8f3c-... (à mettre aussi dans Apps Script)" />
-          </div>
+      <!-- SAUVEGARDE LOCALE (JSON) — fonctionne sans configuration -->
+      <div class=”inner-card” style=”margin-top:14px”>
+        <div style=”font-weight:800;margin-bottom:6px”>💾 Sauvegarde locale (JSON)</div>
+        <div class=”hint” style=”margin-bottom:10px”>Exporte toutes tes données (magasins, références, historique) dans un fichier JSON. Importe-le pour restaurer sur n’importe quel appareil — aucune configuration requise.</div>
+        <div class=”btns”>
+          <button class=”success” id=”btnBackupExport”>⬇️ Exporter la sauvegarde</button>
+          <button class=”primary” id=”btnBackupImport”>⬆️ Importer une sauvegarde</button>
         </div>
-        <div class="btns" style="margin-top:10px">
-          <button class="ghost" id="btnDrivePing">🧪 Tester</button>
-          <button class="success" id="btnDriveSave">💾 Sauvegarder sur Drive</button>
-          <button class="primary" id="btnDriveLoad">⬇️ Restaurer depuis Drive</button>
+        <input type=”file” id=”backupFileInput” accept=”.json” style=”display:none” />
+        <div class=”hint” id=”backupStatus” style=”margin-top:8px”></div>
+      </div>
+
+      <!-- SAUVEGARDE GOOGLE DRIVE (Apps Script — avancé) -->
+      <div class=”inner-card” style=”margin-top:10px”>
+        <div style=”font-weight:800;margin-bottom:4px”>☁️ Sauvegarde Google Drive <span style=”font-size:11px;color:var(--muted);font-weight:500”>(avancé)</span></div>
+        <div class=”hint” style=”margin-bottom:8px”>⚠️ Nécessite un <b>Google Apps Script</b> déployé en Web App. L’URL doit commencer par <code style=”background:var(--border);border-radius:4px;padding:1px 4px”>https://script.google.com/macros/s/</code> — une URL Google Drive classique ne fonctionnera pas.</div>
+        <label>URL du Web App Apps Script</label>
+        <input id=”driveScriptUrl” placeholder=”https://script.google.com/macros/s/XXXXX/exec” />
+        <label style=”margin-top:8px”>Jeton secret (optionnel)</label>
+        <input id=”driveToken” placeholder=”ex: 8f3c-... (à mettre aussi dans Apps Script)” />
+        <div class=”btns” style=”margin-top:10px”>
+          <button class=”ghost small” id=”btnDrivePing”>🧪 Tester</button>
+          <button class=”success small” id=”btnDriveSave”>💾 Sauvegarder</button>
+          <button class=”primary small” id=”btnDriveLoad”>⬇️ Restaurer</button>
         </div>
-        <div class="hint" id="driveStatus" style="margin-top:8px"></div>
+        <div class=”hint” id=”driveStatus” style=”margin-top:8px”></div>
       </div>
 
 
@@ -465,10 +473,7 @@ function refreshRefSelect(){
 
 /* === FILL BASICS (après restauration Drive) === */
 function fillBasics(){
-  const emit = loadJSON(K.emit, DEFAULT_EMETTEURS);
-  const mags = loadJSON(K.mags, DEFAULT_MAGS);
-  fillSelect($("emetteur"), emit);
-  fillSelect($("magasin"), mags);
+  refreshMagSelects(); // même liste pour émetteur et magasin
   refreshRefSelect();
 }
 
@@ -581,20 +586,28 @@ function setUsite(v){
 
 function canonRef(ref){ return String(ref||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
 
+/* === Rafraîchit les deux selects Émetteur ET Magasin avec la même liste === */
+function refreshMagSelects(){
+  const mags = loadJSON(K.mags, []);
+  const prev = $("magasin").value;
+  fillSelect($("emetteur"), mags);
+  fillSelect($("magasin"), mags);
+  // Restaure la sélection si possible
+  if(prev) { $("magasin").value = prev; $("emetteur").value = prev; }
+}
+
 function initData(){
   const refs0 = loadJSON(K.refs, null);
   const mags0 = loadJSON(K.mags, null);
-  const emit0 = loadJSON(K.emit, null);
 
   const refs = (Array.isArray(refs0) && refs0.length) ? refs0 : DEFAULT_REFS;
   const mags = (Array.isArray(mags0) && mags0.length) ? mags0 : DEFAULT_MAGS;
-  const emit = (Array.isArray(emit0) && emit0.length) ? emit0 : DEFAULT_EMETTEURS;
 
   saveJSON(K.refs, refs);
   saveJSON(K.mags, mags);
-  saveJSON(K.emit, emit);
 
-  fillSelect($("emetteur"), emit);
+  // Émetteur et Magasin partagent la MÊME liste
+  fillSelect($("emetteur"), mags);
   fillSelect($("magasin"), mags);
   refreshRefSelect();
 
@@ -1435,6 +1448,98 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btnDriveLoad")?.addEventListener("click", driveLoad);
 });
 
+/* --------------------- Sauvegarde locale JSON --------------------- */
+async function buildFullBackup(){
+  const payload = {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    refs: loadJSON(K.refs, []),
+    mags: loadJSON(K.mags, []),
+    hist: loadJSON(K.hist, []),
+    aiPrefs: (function(){ try{ return JSON.parse(localStorage.getItem(K.aiPrefs)||"{}")||{}; }catch(_){ return {}; } })(),
+    aiBase: null
+  };
+  if(window.AIRefAddon && typeof window.AIRefAddon.exportData === "function"){
+    try{ payload.aiBase = await window.AIRefAddon.exportData(); }
+    catch(e){ console.warn("AI exportData failed (backup)", e); }
+  }
+  return payload;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  /* ─── Export JSON local ─── */
+  $("btnBackupExport")?.addEventListener("click", async () => {
+    const btn = $("btnBackupExport");
+    const status = $("backupStatus");
+    btn.disabled = true;
+    if(status) status.textContent = "⏳ Préparation…";
+    try{
+      const data = await buildFullBackup();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
+      const a = document.createElement("a");
+      const day = new Date().toISOString().slice(0,10);
+      a.href = URL.createObjectURL(blob);
+      a.download = `inventaire_backup_${day}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      if(status) status.textContent = `✅ Fichier téléchargé — ${(data.refs||[]).length} réf., ${(data.mags||[]).length} magasin(s), ${(data.hist||[]).length} bon(s).`;
+      toast("✅ Sauvegarde téléchargée !", "ok");
+    }catch(e){
+      console.error(e);
+      if(status) status.textContent = "❌ Erreur lors de l'export.";
+      toast("❌ Erreur export", "err");
+    }finally{
+      btn.disabled = false;
+    }
+  });
+
+  /* ─── Import JSON local ─── */
+  $("btnBackupImport")?.addEventListener("click", () => {
+    $("backupFileInput")?.click();
+  });
+
+  $("backupFileInput")?.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    const status = $("backupStatus");
+    e.target.value = ""; // reset pour pouvoir re-sélectionner le même fichier
+    if(!file) return;
+    if(!confirm(`Restaurer depuis "${file.name}" ?\nLes données actuelles (références, magasins, historique) seront remplacées.`)) return;
+    if(status) status.textContent = "⏳ Lecture du fichier…";
+    try{
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if(!data || typeof data !== "object") throw new Error("Format invalide");
+
+      if(Array.isArray(data.refs)) saveJSON(K.refs, data.refs);
+      if(Array.isArray(data.mags)) saveJSON(K.mags, data.mags);
+      if(Array.isArray(data.hist)) saveJSON(K.hist, data.hist);
+      if(data.aiPrefs) localStorage.setItem(K.aiPrefs, JSON.stringify(data.aiPrefs));
+
+      if(data.aiBase && window.AIRefAddon && typeof window.AIRefAddon.importData === "function"){
+        if(status) status.textContent = "⏳ Restauration base IA…";
+        try{
+          await window.AIRefAddon.importData(data.aiBase, {
+            replace: true,
+            onProgress: (n, total) => { if(status) status.textContent = `⏳ Base IA : ${n}/${total}`; }
+          });
+        }catch(aiErr){ console.warn("AI importData failed", aiErr); }
+      }
+
+      fillBasics();
+      await renderRefs();
+      renderMags();
+
+      const nb = (data.refs||[]).length, nm = (data.mags||[]).length, nh = (data.hist||[]).length;
+      if(status) status.textContent = `✅ Restauré — ${nb} réf., ${nm} magasin(s), ${nh} bon(s) dans l'historique.`;
+      toast("✅ Sauvegarde restaurée !", "ok");
+    }catch(err){
+      console.error(err);
+      if(status) status.textContent = "❌ Fichier invalide ou corrompu.";
+      toast("❌ Erreur import — fichier invalide ?", "err");
+    }
+  });
+});
+
 /* --------------------- Magasins --------------------- */
 function renderMags(){
   const mags = loadJSON(K.mags, []);
@@ -1458,7 +1563,7 @@ function renderMags(){
       if(!confirm(`Supprimer le magasin "${m?.code}" ?`)) return;
       mags2.splice(Number(b.dataset.mdel), 1);
       saveJSON(K.mags, mags2);
-      fillSelect($("magasin"), mags2);
+      refreshMagSelects(); // ← met à jour Émetteur ET Magasin
       renderMags();
       toast("Magasin supprimé.", "warn");
     });
@@ -1472,7 +1577,7 @@ $("btnAddMag").addEventListener("click", () => {
   if(mags.some(m => m.code === code)){ toast("Ce code magasin existe déjà.", "warn"); return; }
   mags.unshift({ code, label });
   saveJSON(K.mags, mags);
-  fillSelect($("magasin"), mags);
+  refreshMagSelects(); // ← met à jour Émetteur ET Magasin
   $("newMagCode").value = "";
   $("newMagLabel").value = "";
   renderMags();
