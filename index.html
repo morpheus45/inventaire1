@@ -13,169 +13,134 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
   <style>
-    /* ===== VARIABLES ===== */
     :root{
-      --bg:#f0f4ff;
+      --bg:#f5f7fb;
       --card:#ffffff;
       --text:#111827;
       --muted:#6b7280;
-      --blue:#2563eb;
-      --blue-lt:#eff6ff;
+      --blue:#1d4ed8;
       --green:#16a34a;
       --red:#dc2626;
-      --border:#e2e8f0;
-      --shadow:0 4px 24px rgba(37,99,235,.07);
-      --shadow-lg:0 8px 36px rgba(37,99,235,.14);
+      --border:#e5e7eb;
+      --shadow:0 10px 30px rgba(17,24,39,.08);
       --radius:18px;
     }
-    @media(prefers-color-scheme:dark){
-      :root{--bg:#0f172a;--card:#1e293b;--text:#f1f5f9;--muted:#94a3b8;--border:#334155;--shadow:0 4px 24px rgba(0,0,0,.3);--shadow-lg:0 8px 36px rgba(0,0,0,.5);--blue-lt:#1e3a5f;}
-    }
-
-    /* ===== RESET ===== */
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;min-height:100dvh}
-
-    /* ===== HEADER ===== */
-    header{position:sticky;top:0;z-index:100;background:#0f172a;padding:13px 18px;box-shadow:0 2px 16px rgba(0,0,0,.4)}
-    .bar{display:flex;gap:12px;align-items:center;max-width:980px;margin:0 auto}
-    .logo{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;box-shadow:0 4px 12px rgba(59,130,246,.4)}
-    header h1{font-size:17px;font-weight:800;color:#f1f5f9;letter-spacing:-.2px}
-    header .sub{font-size:11px;color:rgba(241,245,249,.5);margin-top:1px}
-    #headerBadge{margin-left:auto;background:rgba(255,255,255,.1);color:#93c5fd;border:1px solid rgba(255,255,255,.15);border-radius:999px;padding:4px 12px;font-size:11.5px;font-weight:700;white-space:nowrap}
-
-    /* ===== LAYOUT ===== */
-    .wrap{max-width:980px;margin:0 auto;padding:14px 14px 32px}
-    .grid{display:grid;gap:14px}
-    .card{background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;transition:box-shadow .2s}
-    .card:hover{box-shadow:var(--shadow-lg)}
-    .inner-card{background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:14px;box-shadow:none}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,#0b1220 0%, #0b1220 60%, rgba(11,18,32,0) 100%);padding:14px 14px 10px}
+    header .bar{display:flex;gap:10px;align-items:center;color:#fff}
+    header .logo{width:38px;height:38px;border-radius:12px;background:#0ea5e9;display:flex;align-items:center;justify-content:center;font-weight:800}
+    header h1{font-size:18px;margin:0}
+    header .sub{font-size:12px;color:rgba(255,255,255,.75);margin:2px 0 0}
+    .wrap{max-width:980px;margin:0 auto;padding:12px 14px 24px}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
     .row{display:grid;grid-template-columns:1fr;gap:10px}
-    @media(min-width:720px){.row{grid-template-columns:1fr 1fr}}
+    @media(min-width:860px){ .row{grid-template-columns:1fr 1fr} }
 
-    /* ===== TABS ===== */
-    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
-    .tab{background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:10px 14px;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--muted);transition:all .15s;position:relative;user-select:none}
-    .tab:hover{border-color:#93c5fd;color:var(--text)}
-    .tab.active{border-color:#3b82f6;color:#2563eb;background:var(--blue-lt);box-shadow:0 4px 18px rgba(37,99,235,.15)}
-    .tab-badge{position:absolute;top:-6px;right:-6px;min-width:19px;height:19px;background:#ef4444;color:#fff;border-radius:999px;font-size:10px;font-weight:800;display:none;align-items:center;justify-content:center;padding:0 4px}
-    .tab-badge.show{display:flex}
-
-    /* ===== FORM ===== */
-    label{display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin:0 0 5px;letter-spacing:.35px;text-transform:uppercase}
-    input,select,textarea{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);font-size:15px;outline:none;transition:border-color .15s,box-shadow .15s}
-    input:focus,select:focus,textarea:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.15)}
-    textarea{min-height:80px;resize:vertical}
-    .search-wrap{position:relative}
-    .search-wrap input{padding-left:36px}
-    .search-wrap::before{content:"🔍";position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none;z-index:1}
-
-    /* ===== BUTTONS ===== */
+    label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+    input, select, textarea{
+      width:100%;padding:11px 12px;border:1px solid var(--border);
+      border-radius:14px;background:#fff;font-size:15px;outline:none;
+    }
+    textarea{min-height:90px;resize:vertical}
     .btns{display:flex;flex-wrap:wrap;gap:10px}
-    button{border:0;border-radius:12px;padding:11px 15px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:transform .1s,box-shadow .15s,opacity .15s}
-    button:active{transform:scale(.97)}
-    button:disabled{opacity:.5;cursor:not-allowed;transform:none}
-    .primary{background:#2563eb;color:#fff;box-shadow:0 4px 14px rgba(37,99,235,.35)}
-    .primary:hover:not(:disabled){box-shadow:0 6px 20px rgba(37,99,235,.5)}
-    .ghost{background:var(--blue-lt);color:#1d4ed8;border:1.5px solid #bfdbfe}
-    .ghost:hover{background:#dbeafe}
-    .success{background:#16a34a;color:#fff;box-shadow:0 4px 14px rgba(22,163,74,.3)}
-    .success:hover:not(:disabled){box-shadow:0 6px 20px rgba(22,163,74,.45)}
-    .danger{background:#fef2f2;color:#b91c1c;border:1.5px solid #fecaca}
-    .danger:hover{background:#fee2e2}
-    .small{font-size:12px;padding:7px 10px;border-radius:9px}
-    hr{border:none;border-top:1.5px solid var(--border);margin:14px 0}
+    button{
+      border:0;border-radius:14px;padding:12px 14px;font-size:15px;
+      cursor:pointer;box-shadow:0 8px 18px rgba(17,24,39,.10);
+      display:inline-flex;align-items:center;gap:10px;
+    }
+    .primary{background:var(--blue);color:#fff}
+    .ghost{background:#eef2ff;color:#111827}
+    .success{background:var(--green);color:#fff}
+    .danger{background:#fee2e2;color:#7f1d1d}
+    .small{font-size:13px;padding:10px 12px;border-radius:12px;box-shadow:none}
+    .hint{color:var(--muted);font-size:12px;line-height:1.35}
+    .tabs{display:flex;gap:10px;flex-wrap:wrap}
+    .tab{background:#fff;border:1px solid var(--border);border-radius:16px;padding:10px 12px;cursor:pointer}
+    .tab.active{border-color:#93c5fd;box-shadow:0 10px 30px rgba(37,99,235,.10)}
+    .hidden{display:none}
 
-    /* ===== MISC ===== */
-    .hint{color:var(--muted);font-size:12px;line-height:1.45}
-    .hidden{display:none!important}
-    .right{display:flex;justify-content:flex-end;gap:6px}
-    .inline{display:flex;gap:10px;align-items:flex-end}
-    .inline>*{flex:1}
-    .section-label{font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:10px}
-    .qty-badge{display:inline-flex;align-items:center;gap:5px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:700;margin-left:8px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;font-size:14px;vertical-align:top}
+    th{color:var(--muted);font-size:12px;font-weight:600}
+    .pill{display:inline-flex;gap:6px;align-items:center;padding:4px 10px;border-radius:999px;background:#f3f4f6;color:#111827;font-size:12px}
+    .x{font-weight:800}
+    .right{display:flex;justify-content:flex-end}
+    .inline{display:flex;gap:10px;align-items:center}
+    .inline > *{flex:1}
+  
+/* --- Statut NEUF / USITÉ (style "cartes" + interrupteurs) --- */
+.status-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:12px;
+}
+.status-card{
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:12px 12px 10px 12px;
+  background:#fff;
+}
+.status-neuf{ background:#eef5ff; }
+.status-usite{ background:#fff6dd; }
+.status-title{
+  font-weight:800;
+  letter-spacing:.4px;
+  margin-bottom:8px;
+}
+.status-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:6px 0;
+  border-top:1px dashed rgba(0,0,0,.08);
+}
+.status-row:first-of-type{ border-top:none; }
+.switch{ position:relative; display:inline-block; width:46px; height:26px; }
+.switch input{ opacity:0; width:0; height:0; }
+.slider{
+  position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0;
+  background:#cfcfcf; transition:.2s; border-radius:999px;
+}
+.slider:before{
+  position:absolute; content:""; height:20px; width:20px; left:3px; bottom:3px;
+  background:white; transition:.2s; border-radius:50%;
+}
+.switch input:checked + .slider{ background:#2563eb; }
+.switch input:checked + .slider:before{ transform:translateX(20px); }
 
-    /* ===== TABLE ===== */
-    .table-wrap{overflow-x:auto;border-radius:12px;border:1.5px solid var(--border)}
-    table{width:100%;border-collapse:collapse;min-width:480px}
-    th,td{border-bottom:1px solid var(--border);padding:9px 10px;text-align:left;font-size:13.5px;vertical-align:middle}
-    th{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;background:var(--bg)}
-    tr:last-child td{border-bottom:none}
-    tr:hover td{background:rgba(59,130,246,.025)}
-    .pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:700}
-    .x{font-weight:900;color:#2563eb}
-    .chip{display:inline-flex;align-items:center;background:var(--blue-lt);color:#1d4ed8;border:1px solid #bfdbfe;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700}
 
-    /* ===== NEUF / USITÉ ===== */
-    .status-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
-    .status-card{border:1.5px solid var(--border);border-radius:12px;padding:12px;background:var(--card)}
-    .status-neuf{background:#eff6ff;border-color:#bfdbfe}
-    .status-usite{background:#fffbeb;border-color:#fcd34d}
-    .status-title{font-weight:800;letter-spacing:.4px;margin-bottom:8px;font-size:13px}
-    .status-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px dashed rgba(0,0,0,.08)}
-    .status-row:first-of-type{border-top:none}
-    .switch{position:relative;display:inline-block;width:44px;height:24px}
-    .switch input{opacity:0;width:0;height:0}
-    .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#cbd5e1;transition:.2s;border-radius:999px}
-    .slider:before{position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:white;transition:.2s;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.2)}
-    .switch input:checked+.slider{background:#2563eb}
-    .switch input:checked+.slider:before{transform:translateX(20px)}
-    @media(prefers-color-scheme:dark){.status-neuf{background:#1e3a5f;border-color:#1d4ed8}.status-usite{background:#422006;border-color:#92400e}.ghost{background:rgba(37,99,235,.15);color:#93c5fd;border-color:rgba(37,99,235,.3)}.danger{background:#450a0a;color:#fca5a5;border-color:#7f1d1d}th{background:rgba(15,23,42,.8)}}
+/* IA buttons inline (non flottants) */
+.ia-actions-inline{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0 0;}
+.btn-ia-inline{width:100%;padding:14px 14px;border-radius:18px;border:0;font-weight:800;font-size:18px;box-shadow:0 8px 18px rgba(0,0,0,.08);background:#0f172a;color:#fff;cursor:pointer;}
+.btn-ia-inline.secondary{background:#374151;}
+@media (max-width:420px){.btn-ia-inline{font-size:16px;padding:12px 12px;}}
+/* IA thumbs in Références */
+.ref-thumb{
+  width:52px;height:52px;
+  border-radius:12px;
+  object-fit:cover;
+  border:1px solid #e5e7eb;
+  background:#f3f4f6;
+}
 
-    /* ===== IA BUTTONS ===== */
-    .ia-actions-inline{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 0}
-    .btn-ia-inline{width:100%;padding:13px;border-radius:14px;border:0;font-weight:800;font-size:16px;background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.2);transition:transform .1s,box-shadow .15s}
-    .btn-ia-inline:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.3)}
-    .btn-ia-inline.secondary{background:linear-gradient(135deg,#374151,#1f2937)}
-    @media(max-width:420px){.btn-ia-inline{font-size:14px;padding:11px}}
-    .ref-thumb{width:48px;height:48px;border-radius:10px;object-fit:cover;border:1.5px solid var(--border);background:var(--bg)}
-
-    /* ===== TOAST ===== */
-    #toast-wrap{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:9999999;display:flex;flex-direction:column-reverse;align-items:center;gap:8px;pointer-events:none}
-    .toast{background:rgba(15,23,42,.95);color:#f1f5f9;padding:11px 20px;border-radius:999px;font-size:13.5px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(12px);animation:tin .22s cubic-bezier(.175,.885,.32,1.275);max-width:340px;text-align:center}
-    .toast.ok{background:rgba(20,83,45,.95);border-color:rgba(74,222,128,.3)}
-    .toast.err{background:rgba(127,29,29,.95);border-color:rgba(252,165,165,.3)}
-    .toast.warn{background:rgba(120,53,15,.95);border-color:rgba(253,211,77,.3)}
-    @keyframes tin{from{opacity:0;transform:translateY(10px) scale(.94)}to{opacity:1;transform:none}}
-
-    /* ===== UNDO BAR ===== */
-    #undo-bar{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:9999998;background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:10px 16px;display:none;align-items:center;gap:12px;box-shadow:var(--shadow-lg);font-size:13px;font-weight:600;animation:tin .22s ease;white-space:nowrap}
-
-    /* ===== HISTORY ===== */
-    .hist-entry{border-radius:12px;border:1.5px solid var(--border);overflow:hidden;margin-bottom:10px;transition:box-shadow .2s}
-    .hist-entry:hover{box-shadow:var(--shadow)}
-    .hist-hdr{padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;background:var(--card)}
-    .hist-hdr:hover{background:var(--bg)}
-    .hist-num{font-weight:800;color:#2563eb;font-size:14px;min-width:88px}
-    .hist-meta{flex:1;font-size:12.5px;color:var(--muted)}
-    .hist-arrow{color:var(--muted);transition:transform .2s;font-size:16px}
-    .hist-entry.open .hist-arrow{transform:rotate(90deg)}
-    .hist-body{display:none;padding:12px 14px;border-top:1.5px solid var(--border);background:var(--bg)}
-    .hist-entry.open .hist-body{display:block}
-    .hist-line{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px dashed var(--border);font-size:13px}
-    .hist-line:last-child{border-bottom:none}
-    .empty-state{text-align:center;padding:28px 14px;color:var(--muted)}
-    .empty-state .eico{font-size:36px;margin-bottom:8px}
-  </style>
+</style>
 </head>
 <body>
-<div id="toast-wrap"></div>
-<div id="undo-bar"></div>
-
 <header>
   <div class="bar">
     <div class="logo">📦</div>
     <div>
       <h1>Gestion d'Inventaire</h1>
-      <div class="sub">Bon de sortie / retour de stock — 2 exemplaires sur 1 A4</div>
+      <div class="sub">Bon de sortie / retour de stock — conforme (2 bons sur 1 A4)</div>
     </div>
-    <div id="headerBadge" style="display:none"></div>
   </div>
 </header>
 
 <div class="wrap">
   <div class="tabs">
-    <div class="tab active" data-tab="bon">🧾 Nouveau Bon<span class="tab-badge" id="tabBonBadge"></span></div>
+    <div class="tab active" data-tab="bon">🧾 Nouveau Bon</div>
     <div class="tab" data-tab="hist">🕘 Historique</div>
     <div class="tab" data-tab="refs">📦 Références</div>
     <div class="tab" data-tab="codes">🏬 Magasins</div>
@@ -265,25 +230,20 @@
         </div>
       </div>
 
-      <div style="margin-top:14px">
-        <div style="display:flex;align-items:center;margin-bottom:8px">
-          <span class="section-label" style="margin-bottom:0">Articles du bon</span>
-          <span class="qty-badge" id="qtyTotalBadge" style="display:none"></span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Référence</th><th>Qté</th><th>Neuf</th><th>Usité</th><th>Commentaire</th><th></th>
-              </tr>
-            </thead>
-            <tbody id="lines"></tbody>
-          </table>
-        </div>
-        <div id="emptyLines" class="empty-state" style="display:none">
-          <div class="eico">📋</div>
-          <div>Aucun article — sélectionne une référence ci-dessus et clique <b>Valider</b>.</div>
-        </div>
+      <div style="margin-top:12px">
+        <table>
+          <thead>
+            <tr>
+              <th>Référence</th>
+              <th>Qté</th>
+              <th>Neuf</th>
+              <th>Usité</th>
+              <th>Commentaire</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="lines"></tbody>
+        </table>
         <div class="hint" id="limitHint" style="margin-top:8px"></div>
       </div>
 
@@ -293,26 +253,24 @@
       </div>
 
       <div class="btns" style="margin-top:14px">
-        <button class="primary" id="btnPdf">⬇️ Exporter PDF</button>
-        <button class="ghost" id="btnPreviewPdf">👁️ Aperçu</button>
-        <button class="ghost" id="btnShare">📲 Partager</button>
-        <button class="ghost" id="btnSaveDraft">💾 Brouillon</button>
+        <button class="primary" id="btnPdf">⬇️ Exporter PDF (2 bons sur 1 A4)</button>
+        <button class="ghost" id="btnShare">📲 Partager le PDF</button>
+        <button class="ghost" id="btnSaveDraft">💾 Économiser (brouillon)</button>
         <button class="danger" id="btnNew">🗑️ Nouveau bon</button>
       </div>
 
       <div class="hint" style="margin-top:10px">
-        💡 Chaque export crée un <b>numéro unique</b> et l'enregistre dans l'historique. Raccourci : <b>Ctrl+S</b> pour sauvegarder le brouillon.
+        Important : chaque export PDF crée un <b>nouveau numéro de bon</b> (unique sur cet appareil via localStorage).
       </div>
     </section>
 
     <!-- HISTORIQUE -->
     <section class="card hidden" id="tab-hist">
-      <div class="btns" style="margin-bottom:12px">
+      <div class="btns" style="margin-bottom:10px">
         <button class="ghost" id="btnRefreshHist">🔄 Actualiser</button>
-        <button class="ghost" id="btnExportCsv">📄 Export CSV</button>
-        <button class="danger" id="btnClearHist">🗑️ Vider</button>
+        <button class="danger" id="btnClearHist">🗑️ Vider l’historique</button>
       </div>
-      <div id="histWrap"></div>
+      <div id="histWrap" class="hint"></div>
     </section>
 
     <!-- REFERENCES -->
@@ -349,20 +307,14 @@
       </div>
 
 
-      <!-- IA : accès rapide -->
-      <div class="btns" id="iaRefsBtns" style="margin-top:10px;display:none">
-        <button class="ghost" id="btnIAOpenScan">🤖 IA photo</button>
-        <button class="ghost" id="btnIAOpenBase">📚 Base IA</button>
+      <!-- IA : accès rapide (si le module IA est présent) -->
+      <div class="btns" id="iaRefsBtns" style="margin-top:10px; display:none">
+        <button class="ghost" id="btnIAOpenScan">🤖 IA photo (détection)</button>
+        <button class="ghost" id="btnIAOpenBase">📚 Base IA (photos par ref)</button>
       </div>
-
-      <!-- Recherche -->
-      <div class="search-wrap" style="margin-top:14px">
-        <input id="refSearch" placeholder="Filtrer les références…" />
-      </div>
-
-      <div class="table-wrap" style="margin-top:10px">
+      <div style="margin-top:12px">
         <table>
-          <thead><tr><th>Référence</th><th style="text-align:right">Actions</th></tr></thead>
+          <thead><tr><th>Référence</th><th></th></tr></thead>
           <tbody id="refsTable"></tbody>
         </table>
       </div>
@@ -408,8 +360,7 @@ const K = {
   hist: "inv_hist_v1",
   seq: "inv_bon_seq_v1",
   driveUrl: "inv_drive_script_url_v1",
-  driveToken: "inv_drive_token_v1",
-  aiPrefs: "inv_ai_prefs_v1"
+  driveToken: "inv_drive_token_v1"
 };
 
 const DEFAULT_EMETTEURS = [
@@ -428,83 +379,10 @@ const DEFAULT_REFS = [
 ].filter(Boolean);
 
 /* --------------------- State --------------------- */
-let lines = [];
-let _lastDeleted = null;
-let _undoTimer = null;
-let _autoSaveTimer = null;
+let lines = []; // {ref, qty, neufOui, usiteOui, comment}
 
 /* --------------------- Helpers --------------------- */
 const $ = (id) => document.getElementById(id);
-
-/* === TOAST === */
-function toast(msg, type="info", ms=3000){
-  const wrap = $("toast-wrap"); if(!wrap) return;
-  const el = document.createElement("div");
-  el.className = "toast" + (type==="ok"?" ok":type==="err"?" err":type==="warn"?" warn":"");
-  el.textContent = msg;
-  wrap.appendChild(el);
-  setTimeout(()=>{ el.style.cssText="opacity:0;transition:opacity .3s"; setTimeout(()=>el.remove(),320); }, ms);
-}
-
-/* === MISSING HELPERS (stub + real) === */
-function ensureAI(){
-  if(window.AIRefAddon && typeof window.AIRefAddon.openScan==="function") return true;
-  toast("Module IA non disponible. Recharge la page si besoin.","warn"); return false;
-}
-function openBase(ref){ if(ensureAI()) window.AIRefAddon.openBase(ref||null); }
-
-/* === REFRESH REF SELECT (évite la duplication de code) === */
-function refreshRefSelect(){
-  const refs = loadJSON(K.refs, []);
-  const sel = $("refSelect"); if(!sel) return;
-  const prev = sel.value;
-  sel.innerHTML = `<option value="" disabled selected>Choisir une référence…</option>` +
-    refs.map(r=>`<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
-  if(prev) sel.value = prev;
-}
-
-/* === FILL BASICS (après restauration Drive) === */
-function fillBasics(){
-  const emit = loadJSON(K.emit, DEFAULT_EMETTEURS);
-  const mags = loadJSON(K.mags, DEFAULT_MAGS);
-  fillSelect($("emetteur"), emit);
-  fillSelect($("magasin"), mags);
-  refreshRefSelect();
-}
-
-/* === AI PREFS — mémoire état NEUF/USITÉ par référence === */
-function loadCondForRef(ref){
-  try{
-    const p = JSON.parse(localStorage.getItem(K.aiPrefs)||"{}") || {};
-    return (p.perRef && p.perRef[canonRef(ref)]) || null;
-  }catch(_){ return null; }
-}
-function saveCondForRef(ref, neufOui, usiteOui){
-  try{
-    const p = JSON.parse(localStorage.getItem(K.aiPrefs)||"{}") || {};
-    p.perRef = p.perRef || {};
-    p.perRef[canonRef(ref)] = { neuf: neufOui?"oui":"non", usite: usiteOui?"oui":"non" };
-    localStorage.setItem(K.aiPrefs, JSON.stringify(p));
-  }catch(_){}
-}
-
-/* === AUTO-SAVE DRAFT === */
-function scheduleDraftSave(){
-  clearTimeout(_autoSaveTimer);
-  _autoSaveTimer = setTimeout(()=>{ saveJSON(K.draft, collectBon(false)); }, 1500);
-}
-
-/* === COUNTERS / BADGES === */
-function updateCounters(){
-  const n = lines.length;
-  const totalQty = lines.reduce((s,l)=>s+l.qty, 0);
-  const badge = $("tabBonBadge");
-  const hdr = $("headerBadge");
-  const qty = $("qtyTotalBadge");
-  if(badge){ badge.textContent=n; badge.className=n>0?"tab-badge show":"tab-badge"; }
-  if(hdr){ if(n>0){ hdr.style.display=""; hdr.textContent=`${n} article${n>1?"s":""} · ${totalQty} u.`; } else hdr.style.display="none"; }
-  if(qty){ if(n>0){ qty.style.display=""; qty.textContent=`${totalQty} unité${totalQty>1?"s":""}  au total`; } else qty.style.display="none"; }
-}
 
 function loadJSON(key, fallback){
   try{
@@ -567,20 +445,6 @@ function fillSelect(sel, arr){
   });
 }
 
-/* === NEUF / USITÉ — fonctions globales (définies UNE SEULE FOIS) === */
-function setNeuf(v){
-  const yes=(v==="oui");
-  $("neufOui").checked=yes; $("neufNon").checked=!yes; $("neufSelect").value=v;
-  if(yes){ $("usiteOui").checked=false; $("usiteNon").checked=true; $("usiteSelect").value="non"; }
-}
-function setUsite(v){
-  const yes=(v==="oui");
-  $("usiteOui").checked=yes; $("usiteNon").checked=!yes; $("usiteSelect").value=v;
-  if(yes){ $("neufOui").checked=false; $("neufNon").checked=true; $("neufSelect").value="non"; }
-}
-
-function canonRef(ref){ return String(ref||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
-
 function initData(){
   const refs0 = loadJSON(K.refs, null);
   const mags0 = loadJSON(K.mags, null);
@@ -596,91 +460,69 @@ function initData(){
 
   fillSelect($("emetteur"), emit);
   fillSelect($("magasin"), mags);
-  refreshRefSelect();
 
-  // Sync émetteur ↔ magasin (une seule fois)
+  // Menu déroulant des références
+  const refSel = $("refSelect");
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+
+  // L’émetteur doit correspondre au magasin
   $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
+  // init: aligne au chargement
   $("emetteur").value = $("magasin").value;
 
-  // Interrupteurs NEUF / USITÉ (liés une seule fois aux fonctions globales)
-  setNeuf("non"); setUsite("non");
+  // Interrupteurs NEUF / USITÉ
+  function setNeuf(v){
+    const yes = (v === "oui");
+    $("neufOui").checked = yes; $("neufNon").checked = !yes;
+    $("neufSelect").value = v;
+    if(yes) setUsite("non");
+  }
+  function setUsite(v){
+    const yes = (v === "oui");
+    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
+    $("usiteSelect").value = v;
+    if(yes) setNeuf("non");
+  }
+  // valeurs par défaut
+  setNeuf("non");
+  setUsite("non");
   $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
   $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
   $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
   $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
 
-  // Mémoire NEUF/USITÉ par référence : pré-remplit à la sélection
-  $("refSelect").addEventListener("change", () => {
-    const ref = sanitizeRef($("refSelect").value);
-    if(!ref) return;
-    const cond = loadCondForRef(ref);
-    if(cond){
-      if(cond.neuf === "oui") setNeuf("oui");
-      else if(cond.usite === "oui") setUsite("oui");
-    }
-  });
 }
 
 /* --------------------- Lines rendering --------------------- */
 function renderLines(){
   const tbody = $("lines");
-  const emptyEl = $("emptyLines");
   tbody.innerHTML = "";
+  lines.forEach((l, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHTML(l.ref)}</td>
+      <td><span class="pill">x${l.qty}</span></td>
+      <td>${l.neufOui ? "<span class='x'>X</span>" : ""}</td>
+      <td>${l.usiteOui ? "<span class='x'>X</span>" : ""}</td>
+      <td>${escapeHTML(l.comment || "")}</td>
+      <td class="right"><button class="danger small" data-del="${idx}">Supprimer</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
 
-  if(lines.length === 0){
-    if(emptyEl) emptyEl.style.display = "";
-  } else {
-    if(emptyEl) emptyEl.style.display = "none";
-    lines.forEach((l, idx) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><b>${escapeHTML(l.ref)}</b></td>
-        <td><span class="pill">×${l.qty}</span></td>
-        <td>${l.neufOui ? "<span class='x'>✓</span>" : "<span style='color:var(--muted)'>—</span>"}</td>
-        <td>${l.usiteOui ? "<span class='x' style='color:#d97706'>✓</span>" : "<span style='color:var(--muted)'>—</span>"}</td>
-        <td><span class="hint">${escapeHTML(l.comment || "")}</span></td>
-        <td class="right"><button class="danger small" data-del="${idx}" title="Supprimer">🗑</button></td>
-      `;
-      tbody.appendChild(tr);
+  tbody.querySelectorAll("button[data-del]").forEach(b => {
+    b.addEventListener("click", async () => {
+      const i = Number(b.dataset.del);
+      lines.splice(i,1);
+      renderLines();
     });
-
-    tbody.querySelectorAll("button[data-del]").forEach(b => {
-      b.addEventListener("click", () => {
-        const i = Number(b.dataset.del);
-        _lastDeleted = { line: lines[i], index: i };
-        lines.splice(i, 1);
-        renderLines();
-        scheduleDraftSave();
-        showUndoBar();
-      });
-    });
-  }
+  });
 
   const limit = 10;
   $("limitHint").textContent = lines.length > limit
-    ? `⚠️ ${lines.length} lignes — le PDF n'affichera que les ${limit} premières.`
-    : lines.length > 0 ? `${lines.length}/10 ligne${lines.length>1?"s":""}` : "";
-  updateCounters();
-}
-
-function showUndoBar(){
-  clearTimeout(_undoTimer);
-  const bar = $("undo-bar");
-  if(!bar) return;
-  const ref = _lastDeleted?.line?.ref || "article";
-  bar.innerHTML = `<span>🗑️ <b>${escapeHTML(ref)}</b> supprimé</span><button class="ghost small" id="btnUndo">↩ Annuler</button>`;
-  bar.style.display = "flex";
-  $("btnUndo").addEventListener("click", () => {
-    if(_lastDeleted){
-      lines.splice(_lastDeleted.index, 0, _lastDeleted.line);
-      _lastDeleted = null;
-      renderLines();
-      scheduleDraftSave();
-      toast("Article restauré ✓", "ok");
-    }
-    bar.style.display = "none";
-  });
-  _undoTimer = setTimeout(() => { bar.style.display = "none"; }, 5000);
+    ? `⚠️ ${lines.length} lignes : le PDF n'affichera que les ${limit} premières (limite du formulaire).`
+    : `Limite PDF : ${limit} lignes (comme sur le bon papier).`;
 }
 
 function escapeHTML(s){
@@ -688,90 +530,89 @@ function escapeHTML(s){
 }
 
 /* --------------------- Add line --------------------- */
-function resetLineForm(){
-  $("refSelect").selectedIndex = 0;
-  $("qtyInput").value = "1";
-  $("commentInput").value = "";
-  setNeuf("non");
-  setUsite("non");
-}
-
-function addArticle(){
+$("btnAdd").addEventListener("click", () => {
   const ref = sanitizeRef($("refSelect").value);
-  if(!ref){ toast("Sélectionne une référence.", "err"); return; }
+  if(!ref){
+    alert("Renseigne une référence.");
+    return;
+  }
   const qty = Math.max(1, parseInt($("qtyInput").value || "1", 10));
   const neufOui = $("neufSelect").value === "oui";
   const usiteOui = $("usiteSelect").value === "oui";
   const comment = sanitizeRef($("commentInput").value);
 
-  // Détection de doublon — propose de fusionner
-  const dupIdx = lines.findIndex(l => l.ref === ref);
-  if(dupIdx >= 0){
-    const dup = lines[dupIdx];
-    if(confirm(`"${ref}" est déjà dans le bon (×${dup.qty}).\nAjouter ${qty} à la quantité existante → ×${dup.qty + qty} ?`)){
-      lines[dupIdx].qty += qty;
-      renderLines();
-      scheduleDraftSave();
-      toast(`Quantité mise à jour : ${ref} ×${lines[dupIdx].qty}`, "ok");
-      resetLineForm();
-      return;
-    }
-    // Sinon on ajoute une 2e ligne quand même
-  }
-
   lines.push({ ref, qty, neufOui, usiteOui, comment });
+  renderLines();
 
-  // Mémorise l’état NEUF/USITÉ pour cette référence
-  if(neufOui || usiteOui) saveCondForRef(ref, neufOui, usiteOui);
-
-  // Sauvegarde auto la ref si elle est nouvelle
+  // auto-save reference if new
   const refs = loadJSON(K.refs, []);
   if(!refs.includes(ref)){
     refs.unshift(ref);
-    saveJSON(K.refs, refs.slice(0, 200));
-    refreshRefSelect(); // ← utilise le helper, pas de duplication
+    saveJSON(K.refs, refs.slice(0,200));
+    // Menu déroulant des références
+  const refSel = $("refSelect");
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+
+  // L’émetteur doit correspondre au magasin
+  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
+  // init: aligne au chargement
+  $("emetteur").value = $("magasin").value;
+
+  // Interrupteurs NEUF / USITÉ
+  function setNeuf(v){
+    const yes = (v === "oui");
+    $("neufOui").checked = yes; $("neufNon").checked = !yes;
+    $("neufSelect").value = v;
+    if(yes) setUsite("non");
+  }
+  function setUsite(v){
+    const yes = (v === "oui");
+    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
+    $("usiteSelect").value = v;
+    if(yes) setNeuf("non");
+  }
+  // valeurs par défaut
+  setNeuf("non");
+  setUsite("non");
+  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
+  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
+  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
+  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
+
   }
 
-  renderLines();
-  scheduleDraftSave();
-  toast(`✅ ${ref} ×${qty} ajouté`, "ok", 1800);
-  resetLineForm();
-}
-
-$("btnAdd").addEventListener("click", addArticle);
-
-// Raccourci clavier : Entrée dans Qté ou Commentaire → valide l’article
-$("qtyInput").addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addArticle(); } });
-$("commentInput").addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addArticle(); } });
+  $("refSelect").selectedIndex = 0;
+  $("qtyInput").value = "1";
+  $("commentInput").value = "";
+  $("neufSelect").value = "non";
+  $("usiteSelect").value = "non";
+});
 
 $("btnClearLine").addEventListener("click", () => {
-  resetLineForm();
-  toast("Saisie effacée");
+  $("refSelect").selectedIndex = 0;
+  $("qtyInput").value = "1";
+  $("commentInput").value = "";
+  $("neufSelect").value = "non";
+  $("usiteSelect").value = "non";
+  if ($("neufOui")) { $("neufOui").checked = false; $("neufNon").checked = true; }
+  if ($("usiteOui")) { $("usiteOui").checked = false; $("usiteNon").checked = true; }
 });
 
 /* --------------------- Draft / new --------------------- */
 $("btnSaveDraft").addEventListener("click", () => {
-  saveJSON(K.draft, collectBon(false));
-  toast("💾 Brouillon enregistré", "ok");
+  const draft = collectBon(false);
+  saveJSON(K.draft, draft);
+  alert("Brouillon enregistré.");
 });
 
 $("btnNew").addEventListener("click", () => {
-  if(confirm("Créer un nouveau bon ? (le brouillon actuel reste inchangé)")){
+  if(confirm("Créer un nouveau bon ? (le brouillon actuel ne sera pas supprimé)")){
     lines = [];
     $("observations").value = "";
     $("destinataire").value = "STOCK CENTRAL";
     $("date").value = todayISO();
     renderLines();
-    toast("Nouveau bon prêt");
-  }
-});
-
-// Ctrl+S = sauvegarde brouillon
-document.addEventListener("keydown", e => {
-  if((e.ctrlKey || e.metaKey) && e.key === "s"){
-    e.preventDefault();
-    saveJSON(K.draft, collectBon(false));
-    toast("💾 Brouillon enregistré (Ctrl+S)", "ok");
   }
 });
 
@@ -958,14 +799,14 @@ function drawBon(doc, y0, data){
   }
 }
 
-async function buildPDF(){
+async function buildPDF(twoCopies=true){
   if(!window.jspdf || !window.jspdf.jsPDF){
-    toast("Librairie PDF non chargée — vérifie ta connexion.", "err");
+    alert("Librairie PDF non chargée (jsPDF). Vérifie ta connexion et recharge la page.");
     return null;
   }
   const data = collectBon(true);
   if(data.lines.length === 0){
-    toast("Ajoute au moins un article avant d'exporter.", "err");
+    alert("Ajoute au moins une référence avant d'exporter.");
     return null;
   }
 
@@ -986,301 +827,360 @@ async function buildPDF(){
 }
 
 $("btnPdf").addEventListener("click", async () => {
-  const btn = $("btnPdf");
-  btn.disabled = true; btn.textContent = "⏳ Génération…";
-  try {
-    const res = await buildPDF();
-    if(!res) return;
-    res.doc.save(`bon_sortie_${res.bonNumber}.pdf`);
-    toast(`✅ PDF N°${res.bonNumber} téléchargé`, "ok");
-  } finally {
-    btn.disabled = false; btn.innerHTML = "⬇️ Exporter PDF";
-  }
-});
-
-$("btnPreviewPdf").addEventListener("click", async () => {
-  const btn = $("btnPreviewPdf");
-  btn.disabled = true; btn.textContent = "⏳ Aperçu…";
-  try {
-    const res = await buildPDF();
-    if(!res) return;
-    const url = res.doc.output("bloburl");
-    window.open(url, "_blank");
-    toast("Aperçu ouvert dans un nouvel onglet ✓");
-  } finally {
-    btn.disabled = false; btn.innerHTML = "👁️ Aperçu";
-  }
+  const res = await buildPDF(true);
+  if(!res) return;
+  res.doc.save(`bon_sortie_${res.bonNumber}.pdf`);
 });
 
 $("btnShare").addEventListener("click", async () => {
-  const res = await buildPDF();
+  const res = await buildPDF(true);
   if(!res) return;
+
   const blob = res.doc.output("blob");
   const file = new File([blob], `bon_sortie_${res.bonNumber}.pdf`, { type: "application/pdf" });
+
   if(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })){
-    try{ await navigator.share({ title: "Bon de sortie / retour", files: [file] }); }
-    catch(e){ /* annulé */ }
-  } else {
+    try{
+      await navigator.share({ title: "Bon de sortie / retour", files: [file] });
+    }catch(e){
+      // user cancelled
+    }
+  }else{
+    // fallback: download
     res.doc.save(`bon_sortie_${res.bonNumber}.pdf`);
-    toast("Partage non supporté ici : PDF téléchargé.", "warn");
+    alert("Partage non supporté ici : le PDF a été téléchargé (ouvre-le puis partage depuis ton téléphone).");
   }
 });
 
 /* --------------------- Historique --------------------- */
 function renderHist(){
   const hist = loadJSON(K.hist, []);
-  const wrap = $("histWrap");
-  if(!hist.length){
-    wrap.innerHTML = `<div class="empty-state"><div class="eico">🕘</div><div>Aucun bon exporté pour le moment.</div></div>`;
+  if(hist.length === 0){
+    $("histWrap").innerHTML = "Aucun bon exporté pour le moment.";
     return;
   }
-  wrap.innerHTML = hist.map((h, i) => {
+  const rows = hist.map(h => {
     const dt = (h.date || "").split("-").reverse().join("/");
-    const created = (h.createdAt || "").replace("T"," ").slice(0,16);
-    const lineRows = (h.lines || []).map(l => `
-      <div class="hist-line">
-        <span class="pill">×${l.qty}</span>
-        <b>${escapeHTML(l.ref)}</b>
-        ${l.neufOui ? `<span class="chip">NEUF</span>` : ""}
-        ${l.usiteOui ? `<span class="chip" style="background:#fffbeb;color:#92400e;border-color:#fcd34d">USITÉ</span>` : ""}
-        ${l.comment ? `<span class="hint">${escapeHTML(l.comment)}</span>` : ""}
-      </div>`).join("");
-    return `
-      <div class="hist-entry" id="hentry-${i}">
-        <div class="hist-hdr" data-idx="${i}">
-          <div class="hist-num">N° ${h.bonNumber || "—"}</div>
-          <div class="hist-meta">
-            <div>${escapeHTML(h.magasin||"")} → ${escapeHTML(h.destinataire||"")} · ${dt}</div>
-            <div>${(h.lines||[]).length} ligne(s) · ${created}</div>
-          </div>
-          <span class="hist-arrow">›</span>
-        </div>
-        <div class="hist-body">${lineRows || `<div class="hint">Aucune ligne.</div>`}</div>
-      </div>`;
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div><b>N° ${h.bonNumber}</b> — ${escapeHTML(h.magasin)} → ${escapeHTML(h.destinataire)} — ${dt}</div>
+      <div class="hint">${h.lines.length} ligne(s) — ${escapeHTML((h.createdAt||"").replace("T"," ").slice(0,19))}</div>
+    </div>`;
   }).join("");
-
-  wrap.querySelectorAll(".hist-hdr").forEach(hdr => {
-    hdr.addEventListener("click", () => {
-      document.getElementById("hentry-" + hdr.dataset.idx).classList.toggle("open");
-    });
-  });
+  $("histWrap").innerHTML = rows;
 }
 
 $("btnRefreshHist").addEventListener("click", renderHist);
-
 $("btnClearHist").addEventListener("click", () => {
-  if(confirm("Supprimer tout l'historique local ?")){
+  if(confirm("Supprimer l'historique local ?")){
     localStorage.removeItem(K.hist);
     renderHist();
-    toast("Historique effacé.", "warn");
   }
 });
 
-$("btnExportCsv").addEventListener("click", () => {
-  const hist = loadJSON(K.hist, []);
-  if(!hist.length){ toast("Aucun historique à exporter.", "warn"); return; }
-  const rows = [["N°Bon","Date","Émetteur","Magasin","Destinataire","Référence","Qté","Neuf","Usité","Commentaire","Créé le"]];
-  hist.forEach(h => {
-    (h.lines||[]).forEach(l => {
-      rows.push([h.bonNumber||"", h.date||"", h.emetteur||"", h.magasin||"", h.destinataire||"",
-        l.ref||"", l.qty||1, l.neufOui?"Oui":"Non", l.usiteOui?"Oui":"Non", l.comment||"", (h.createdAt||"").slice(0,19)]);
-    });
-  });
-  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(";")).join("\n");
-  const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = "historique_bons.csv"; a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
-  toast("📄 CSV exporté ✓", "ok");
-});
-
-/* --------------------- IA integration (window.addReferenceFromAI) --------------------- */
-/* Appelé par l’addon IA pour pré-remplir + valider automatiquement une ligne */
-(function(){
-  window.addReferenceFromAI = function(ref, meta){
-    try{
-      const r = sanitizeRef(ref);
-      if(!r) return;
-      const neufOui = !!(meta && meta.neufOui);
-      const usiteOui = !!(meta && meta.usiteOui);
-
-      // Mémorise l’état dans aiPrefs
-      saveCondForRef(r, neufOui, usiteOui);
-
-      // S’assure que la ref existe dans le select
-      const refsArr = loadJSON(K.refs, []);
-      if(!refsArr.includes(r)){
-        refsArr.unshift(r);
-        saveJSON(K.refs, refsArr.slice(0, 200));
-        refreshRefSelect(); // ← helper centralisé
-      }
-
-      const sel = $("refSelect");
-      if(sel) sel.value = r;
-      const qtyInput = $("qtyInput");
-      if(qtyInput) qtyInput.value = String(meta?.qty || 1);
-
-      // Applique NEUF/USITÉ via les fonctions globales
-      if(neufOui) setNeuf("oui");
-      else if(usiteOui) setUsite("oui");
-      else { setNeuf("non"); setUsite("non"); }
-
-      // Auto-valide si demandé (défaut : true pour l’IA)
-      const autoAdd = meta && ("autoAdd" in meta) ? !!meta.autoAdd : true;
-      if(autoAdd){
-        const refVal = sanitizeRef($("refSelect")?.value);
-        if(refVal){
-          const qty = Math.max(1, parseInt($("qtyInput")?.value || "1", 10));
-          const n = ($("neufSelect")?.value === "oui");
-          const u = ($("usiteSelect")?.value === "oui");
-          const c = sanitizeRef($("commentInput")?.value);
-          lines.push({ ref: refVal, qty, neufOui: n, usiteOui: u, comment: c });
-          renderLines();
-          scheduleDraftSave();
-          const m = document.getElementById("ai-modal");
-          if(m) m.style.display = "none";
-        }
-      }
-    }catch(e){ console.error("addReferenceFromAI error", e); }
-  };
-})();
-
 /* --------------------- Références --------------------- */
 async function renderRefs(){
-  const allRefs = loadJSON(K.refs, []);
-  // Filtre via la barre de recherche
-  const query = ($("refSearch")?.value || "").toLowerCase().trim();
-  const refs = query ? allRefs.filter(r => r.toLowerCase().includes(query)) : allRefs;
-
+  const refs = loadJSON(K.refs, []);
   const tbody = $("refsTable");
   tbody.innerHTML = "";
 
-  // Boutons IA rapides
+  // IA present? Show quick access buttons in this tab
   const iaOk = !!(window.AIRefAddon && typeof window.AIRefAddon.openScan === "function");
   const iaBtns = $("iaRefsBtns");
-  if(iaBtns) iaBtns.style.display = iaOk ? "flex" : "none";
-  if(iaOk){
+  if (iaBtns) iaBtns.style.display = iaOk ? "flex" : "none";
+  if (iaOk) {
     $("btnIAOpenScan").onclick = () => { if(!ensureAI()) return; window.AIRefAddon.openScan(); };
     $("btnIAOpenBase").onclick = () => { if(!ensureAI()) return; window.AIRefAddon.openBase(); };
   }
 
-  // Miniatures IA
+  // Pull thumbs/counts from 
+/* --------------------- IA integration --------------------- */
+/* L'addon IA déclenche un event "ai-ref-confirmed" et peut appeler window.addReferenceFromAI(ref, meta).
+   On utilise ça pour:
+   - mémoriser les derniers choix (réf + état neuf/usité)
+   - pré-remplir la ligne, et (optionnel) auto-valider la ligne.
+*/
+(function(){
+  const AI_PREF_KEY = "inv_ai_prefs_v1";
+  function loadAIPrefs(){
+    try{ return JSON.parse(localStorage.getItem(AI_PREF_KEY) || "{}") || {}; }catch(_){ return {}; }
+  }
+  function saveAIPrefs(p){
+    try{ localStorage.setItem(AI_PREF_KEY, JSON.stringify(p||{})); }catch(_){}
+  }
+  function canonRef(ref){ return String(ref||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
+  function setNeufUsite(neufOui, usiteOui){
+    // mutual exclusivity
+    if(neufOui) usiteOui = false;
+    if(usiteOui) neufOui = false;
+
+    const neufV = neufOui ? "oui" : "non";
+    const usiteV = usiteOui ? "oui" : "non";
+
+    const ns = document.getElementById("neufSelect");
+    const us = document.getElementById("usiteSelect");
+    if(ns) ns.value = neufV;
+    if(us) us.value = usiteV;
+
+    const nOui = document.getElementById("neufOui");
+    const nNon = document.getElementById("neufNon");
+    const uOui = document.getElementById("usiteOui");
+    const uNon = document.getElementById("usiteNon");
+    if(nOui && nNon){ nOui.checked = neufOui; nNon.checked = !neufOui; }
+    if(uOui && uNon){ uOui.checked = usiteOui; uNon.checked = !usiteOui; }
+  }
+
+  window.addReferenceFromAI = function(ref, meta){
+    try{
+      const r = sanitizeRef(ref);
+      if(!r) return;
+
+      // prefs
+      const prefs = loadAIPrefs();
+      prefs.lastRef = r;
+
+      const neufOui = !!(meta && meta.neufOui);
+      const usiteOui = !!(meta && meta.usiteOui);
+      prefs.lastNeuf = neufOui ? "oui" : "non";
+      prefs.lastUsite = usiteOui ? "oui" : "non";
+      prefs.perRef = prefs.perRef || {};
+      prefs.perRef[canonRef(r)] = { neuf: prefs.lastNeuf, usite: prefs.lastUsite };
+      saveAIPrefs(prefs);
+
+      // ensure ref exists in select list
+      const sel = document.getElementById("refSelect");
+      if(sel){
+        const hasOpt = Array.from(sel.options).some(o => sanitizeRef(o.value) === r);
+        if(!hasOpt){
+          // persist in refs store too (same behaviour as manual add)
+          const refsArr = loadJSON(K.refs, []);
+          if(!refsArr.includes(r)){
+            refsArr.unshift(r);
+            saveJSON(K.refs, refsArr.slice(0,200));
+          }
+          fillSelect(sel, refsArr.map(code=>({code, label:""})));
+        }
+        sel.value = r;
+      }
+
+      const qtyInput = document.getElementById("qtyInput");
+      if(qtyInput) qtyInput.value = String(meta && meta.qty ? meta.qty : 1);
+
+      setNeufUsite(neufOui, usiteOui);
+
+      // auto validate line if requested (default true for IA)
+      const autoAdd = meta && ("autoAdd" in meta) ? !!meta.autoAdd : true;
+      if(autoAdd){
+        // NOTE: programmatic click can be ignored on some mobile contexts;
+        // we directly call the same logic as the "Valider l’article" button.
+        const refVal = sanitizeRef(document.getElementById("refSelect")?.value);
+        if(refVal){
+          const qty = Math.max(1, parseInt(document.getElementById("qtyInput")?.value || "1", 10));
+          const neufOui2 = (document.getElementById("neufSelect")?.value === "oui");
+          const usiteOui2 = (document.getElementById("usiteSelect")?.value === "oui");
+          const comment = sanitizeRef(document.getElementById("commentInput")?.value);
+          try{
+            // "lines" + "renderLines" are globals in this page.
+            lines.push({ ref: refVal, qty, neufOui: neufOui2, usiteOui: usiteOui2, comment });
+            renderLines();
+          }catch(_){
+            // fallback to click
+            const btn = document.getElementById("btnAdd");
+            if(btn) btn.click();
+          }
+
+          // Close IA modal if still open
+          const m = document.getElementById("ai-modal");
+          if(m) m.style.display = "none";
+        }
+      }
+    }catch(e){
+      console.error("addReferenceFromAI error", e);
+    }
+  };
+})();
+
+
+// IA photo base (if available)
   let summary = {};
-  if(window.AIRefAddon && typeof window.AIRefAddon.getRefSummary === "function"){
-    try{ summary = await window.AIRefAddon.getRefSummary(); }catch{ summary = {}; }
+  if (window.AIRefAddon && typeof window.AIRefAddon.getRefSummary === "function") {
+    try { summary = await window.AIRefAddon.getRefSummary(); } catch { summary = {}; }
   }
 
-  if(!refs.length){
-    tbody.innerHTML = `<tr><td colspan="2"><div class="empty-state" style="padding:20px"><div class="eico">📭</div><div>Aucune référence trouvée.</div></div></td></tr>`;
-    return;
-  }
-
-  refs.forEach(r => {
-    const realIdx = allRefs.indexOf(r); // index réel dans la liste complète
+  refs.forEach((r, idx) => {
     const sum = summary[r] || { count: 0, thumb: null };
     const thumb = sum.thumb
-      ? `<img class="ref-thumb" src="${sum.thumb}" alt="IA" style="cursor:pointer" />`
-      : `<span class="hint" style="font-size:11px">Aucune photo</span>`;
+      ? `<img class="ref-thumb" src="${sum.thumb}" alt="photo IA" />`
+      : `<span class="hint" style="white-space:nowrap">Aucune photo IA</span>`;
+    const countHint = `<div class="hint" style="margin-top:2px">${sum.count || 0} photo(s) IA</div>`;
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="aiThumbs" data-idx="${realIdx}" style="min-width:52px;cursor:pointer">${thumb}</div>
-          <div>
-            <div style="font-weight:700">${escapeHTML(r)}</div>
-            <div class="hint">${sum.count || 0} photo(s) IA</div>
+        <div class="row" style="align-items:center; gap:10px">
+          <div style="flex:1; min-width:0">
+            <div><b>${escapeHTML(r)}</b></div>
+            ${countHint}
           </div>
+          <div class="right aiThumbs" data-idx="${idx}" style="min-width:70px">${thumb}</div>
         </div>
       </td>
       <td class="right">
-        <button class="ghost small" data-iaref="${realIdx}" title="Ajouter photo IA">📷</button>
-        <button class="ghost small" data-redit="${realIdx}" title="Renommer">✏️</button>
-        <button class="danger small" data-rdel="${realIdx}" title="Supprimer">🗑</button>
+        <button class="ghost small" data-iaref="${idx}">📷 IA</button>
+        <button class="ghost small" data-redit="${idx}">✏️ Modifier</button>
+        <button class="ghost small" data-rphoto="${idx}">🖼️ Photo</button>
+        <button class="danger small" data-rdel="${idx}">Supprimer</button>
       </td>`;
     tbody.appendChild(tr);
   });
 
-  // Miniatures → ouvre la base IA
-  tbody.querySelectorAll(".aiThumbs").forEach(d => {
-    d.addEventListener("click", () => openBase(allRefs[Number(d.dataset.idx)]));
-  });
-
-  // Bouton IA par ref
-  tbody.querySelectorAll("button[data-iaref]").forEach(b => {
+  // Delete ref
+  tbody.querySelectorAll("button[data-rdel]").forEach(b => {
     b.addEventListener("click", async () => {
-      if(!ensureAI() || typeof window.AIRefAddon.addPhotoForRef !== "function") return;
-      await window.AIRefAddon.addPhotoForRef(allRefs[Number(b.dataset.iaref)]);
-      await renderRefs();
+      const refs2 = loadJSON(K.refs, []);
+      const i = Number(b.dataset.rdel);
+      const ref = refs2[i];
+      if(!ref) return;
+
+      if(!confirm(`Supprimer la référence "${ref}" ?`)) return;
+
+      refs2.splice(i, 1);
+      saveJSON(K.refs, refs2);
+      renderRefs();
+
+      // Menu déroulant des références (après ajout/suppression)
+      const refSel2 = $("refSelect");
+      const opts = `<option value="" disabled selected>Choisir une référence...</option>` +
+        refs2.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+      refSel2.innerHTML = opts;
     });
   });
 
-  // Renommer
+  
+  // Edit ref (rename) + keep AI base in sync if possible
   tbody.querySelectorAll("button[data-redit]").forEach(b => {
     b.addEventListener("click", async () => {
       const refs2 = loadJSON(K.refs, []);
       const i = Number(b.dataset.redit);
       const oldRef = refs2[i];
       if(!oldRef) return;
-      const newRef = sanitizeRef(prompt(`Modifier la référence :`, oldRef));
+
+      const newRefRaw = prompt(`Modifier la référence :`, oldRef);
+      const newRef = sanitizeRef(newRefRaw);
       if(!newRef) return;
-      if(refs2.some((r, idx) => idx !== i && sanitizeRef(r) === newRef)){
-        toast("Cette référence existe déjà.", "err"); return;
-      }
+
+      // prevent duplicates
+      const already = refs2.some((r, idx) => idx!==i && sanitizeRef(r) === newRef);
+      if(already){ alert("Cette référence existe déjà."); return; }
+
+      // rename in list
       refs2[i] = newRef;
       saveJSON(K.refs, refs2);
-      // Sync AI prefs
+
+      // rename in AI prefs map (Neuf/Usité)
       try{
-        const p = JSON.parse(localStorage.getItem(K.aiPrefs)||"{}") || {};
+        const key = "inv_ai_prefs_v1";
+        const p = JSON.parse(localStorage.getItem(key) || "{}") || {};
         p.perRef = p.perRef || {};
-        const kO = canonRef(oldRef), kN = canonRef(newRef);
-        if(p.perRef[kO] && !p.perRef[kN]) p.perRef[kN] = p.perRef[kO];
-        delete p.perRef[kO];
-        localStorage.setItem(K.aiPrefs, JSON.stringify(p));
+        const kOld = canonRef(oldRef);
+        const kNew = canonRef(newRef);
+        if (p.perRef[kOld] && !p.perRef[kNew]) p.perRef[kNew] = p.perRef[kOld];
+        delete p.perRef[kOld];
+        localStorage.setItem(key, JSON.stringify(p));
       }catch(_){}
-      // Sync AI base
-      try{ if(window.AIRefAddon?.renameRef) await window.AIRefAddon.renameRef(oldRef, newRef); }
-      catch(e){ console.warn("renameRef AI failed", e); }
-      refreshRefSelect(); // ← helper centralisé
-      await renderRefs();
-      toast("Référence renommée ✓", "ok");
+
+      // rename in AI base (IndexedDB) if addon exposes it
+      try{
+        if(window.AIRefAddon && typeof window.AIRefAddon.renameRef === "function"){
+          await window.AIRefAddon.renameRef(oldRef, newRef);
+        }
+      }catch(e){ console.warn("renameRef AI base failed", e); }
+
+      renderRefs();
+
+      // refresh select
+      const refSel2 = $("refSelect");
+      const opts = `<option value="" disabled selected>Choisir une référence...</option>` +
+        refs2.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
+      refSel2.innerHTML = opts;
     });
   });
 
-  // Supprimer
-  tbody.querySelectorAll("button[data-rdel]").forEach(b => {
+  // Add/replace photo for a ref (quick)
+  tbody.querySelectorAll("button[data-rphoto]").forEach(b => {
     b.addEventListener("click", async () => {
       const refs2 = loadJSON(K.refs, []);
-      const i = Number(b.dataset.rdel);
+      const i = Number(b.dataset.rphoto);
       const ref = refs2[i];
-      if(!ref || !confirm(`Supprimer la référence "${ref}" ?`)) return;
-      refs2.splice(i, 1);
-      saveJSON(K.refs, refs2);
-      refreshRefSelect(); // ← helper centralisé
-      await renderRefs();
-      toast(`Supprimé : ${ref}`, "warn");
+      if(!ref) return;
+      if(!ensureAI()) return;
+      try{
+        // Add a photo sample; thumb updates automatically in list
+        await window.AIRefAddon.addPhotoForRef(ref);
+        renderRefs();
+      }catch(e){
+        console.error(e);
+        alert("Erreur lors de l’ajout de photo IA.");
+      }
     });
   });
-}
 
-/* Ajout ref + recherche live */
+// Open IA base on a specific reference
+  tbody.querySelectorAll("button[data-iaref]").forEach(b => {
+    b.addEventListener("click", async () => {
+      if (!ensureAI() || typeof window.AIRefAddon.addPhotoForRef !== "function") { return; }
+      const ref = refs[Number(b.dataset.iaref)];
+      await window.AIRefAddon.addPhotoForRef(ref);
+      await renderRefs();
+});
+  });
+  // Click on thumbnails/count to manage photos for this reference
+  tbody.querySelectorAll(".aiThumbs").forEach(d => {
+    d.addEventListener("click", () => {
+      const ref = refs[Number(d.dataset.idx)];
+      openBase(ref);
+    });
+  });
+
+}
 $("btnAddRef").addEventListener("click", () => {
   const r = sanitizeRef($("newRef").value);
-  if(!r){ toast("Saisis une référence.", "err"); return; }
+  if(!r) return;
   const refs = loadJSON(K.refs, []);
-  if(refs.some(x => sanitizeRef(x) === r)){ toast("Cette référence existe déjà.", "warn"); return; }
-  refs.unshift(r);
-  saveJSON(K.refs, refs.slice(0, 200));
+  if(!refs.includes(r)) refs.unshift(r);
+  saveJSON(K.refs, refs.slice(0,200));
   $("newRef").value = "";
-  refreshRefSelect(); // ← helper centralisé (AUCUNE duplication)
   renderRefs();
-  toast(`✅ Référence ajoutée : ${r}`, "ok");
-});
+  // Menu déroulant des références
+  const refSel = $("refSelect");
+  refSel.innerHTML = `<option value="" disabled selected>Choisir une référence...</option>` +
+    refs.map(r => `<option value="${r.replaceAll('"','&quot;')}">${escapeHTML(r)}</option>`).join("");
 
-// Recherche live dans les refs
-document.addEventListener("DOMContentLoaded", () => {
-  const s = $("refSearch");
-  if(s) s.addEventListener("input", () => renderRefs());
+  // L’émetteur doit correspondre au magasin
+  $("magasin").addEventListener("change", () => { $("emetteur").value = $("magasin").value; });
+  // init: aligne au chargement
+  $("emetteur").value = $("magasin").value;
+
+  // Interrupteurs NEUF / USITÉ
+  function setNeuf(v){
+    const yes = (v === "oui");
+    $("neufOui").checked = yes; $("neufNon").checked = !yes;
+    $("neufSelect").value = v;
+    if(yes) setUsite("non");
+  }
+  function setUsite(v){
+    const yes = (v === "oui");
+    $("usiteOui").checked = yes; $("usiteNon").checked = !yes;
+    $("usiteSelect").value = v;
+    if(yes) setNeuf("non");
+  }
+  // valeurs par défaut
+  setNeuf("non");
+  setUsite("non");
+  $("neufOui").addEventListener("change", () => setNeuf($("neufOui").checked ? "oui" : "non"));
+  $("neufNon").addEventListener("change", () => setNeuf($("neufNon").checked ? "non" : "oui"));
+  $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
+  $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
+
 });
 
 
@@ -1334,7 +1234,7 @@ async function buildBackupPayload(){
     refs: loadJSON(K.refs, []),
     mags: loadJSON(K.mags, []),
     emit: loadJSON(K.emit, []),
-    aiPrefs: (function(){ try{ return JSON.parse(localStorage.getItem(K.aiPrefs)||"{}")||{}; }catch(_){ return {}; } })(),
+    aiPrefs: (function(){ try{ return JSON.parse(localStorage.getItem("inv_ai_prefs_v1")||"{}")||{}; }catch(_){ return {}; } })(),
     aiBase: null
   };
 
@@ -1440,43 +1340,38 @@ function renderMags(){
   const mags = loadJSON(K.mags, []);
   const tbody = $("magTable");
   tbody.innerHTML = "";
-  if(!mags.length){
-    tbody.innerHTML = `<tr><td colspan="3"><div class="empty-state" style="padding:16px"><div class="eico">🏬</div><div>Aucun magasin configuré.</div></div></td></tr>`;
-    return;
-  }
   mags.forEach((m, idx) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><b>${escapeHTML(m.code)}</b></td>
+    tr.innerHTML = `<td>${escapeHTML(m.code)}</td>
       <td>${escapeHTML(m.label || "")}</td>
-      <td class="right"><button class="danger small" data-mdel="${idx}" title="Supprimer">🗑</button></td>`;
+      <td class="right"><button class="danger small" data-mdel="${idx}">Supprimer</button></td>`;
     tbody.appendChild(tr);
   });
   tbody.querySelectorAll("button[data-mdel]").forEach(b => {
-    b.addEventListener("click", () => {
+    b.addEventListener("click", async () => {
       const mags2 = loadJSON(K.mags, []);
-      const m = mags2[Number(b.dataset.mdel)];
-      if(!confirm(`Supprimer le magasin "${m?.code}" ?`)) return;
-      mags2.splice(Number(b.dataset.mdel), 1);
+      mags2.splice(Number(b.dataset.mdel),1);
       saveJSON(K.mags, mags2);
       fillSelect($("magasin"), mags2);
       renderMags();
-      toast("Magasin supprimé.", "warn");
     });
   });
 }
 $("btnAddMag").addEventListener("click", () => {
   const code = sanitizeRef($("newMagCode").value).toUpperCase();
   const label = sanitizeRef($("newMagLabel").value);
-  if(!code){ toast("Saisis un code magasin.", "err"); return; }
+  if(!code) return;
   const mags = loadJSON(K.mags, []);
-  if(mags.some(m => m.code === code)){ toast("Ce code magasin existe déjà.", "warn"); return; }
+  if(mags.some(m => m.code === code)){
+    alert("Ce code magasin existe déjà.");
+    return;
+  }
   mags.unshift({ code, label });
   saveJSON(K.mags, mags);
   fillSelect($("magasin"), mags);
   $("newMagCode").value = "";
   $("newMagLabel").value = "";
   renderMags();
-  toast(`✅ Magasin ajouté : ${code}`, "ok");
 });
 
 /* --------------------- Service Worker --------------------- */
