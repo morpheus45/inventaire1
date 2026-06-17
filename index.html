@@ -122,6 +122,14 @@
     .switch input:checked+.slider:before{transform:translateX(20px)}
     @media(prefers-color-scheme:dark){.status-neuf{background:#1e3a5f;border-color:#1d4ed8}.status-usite{background:#422006;border-color:#92400e}.ghost{background:rgba(37,99,235,.15);color:#93c5fd;border-color:rgba(37,99,235,.3)}.danger{background:#450a0a;color:#fca5a5;border-color:#7f1d1d}th{background:rgba(15,23,42,.8)}}
 
+    /* ===== TEMPS / TYPE ===== */
+    .status-temps{background:#f0fdf4;border-color:#bbf7d0;margin-top:12px}
+    .temps-options{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+    .temps-opt{display:inline-flex;align-items:center;padding:6px 14px;border-radius:999px;border:1.5px solid var(--border);background:var(--card);cursor:pointer;font-weight:700;font-size:13px;transition:background .15s,border-color .15s;user-select:none}
+    .temps-opt input[type=radio]{display:none}
+    .temps-opt.selected{background:#dcfce7;border-color:#4ade80;color:#15803d}
+    @media(prefers-color-scheme:dark){.status-temps{background:#052e16;border-color:#166534}.temps-opt.selected{background:#14532d;border-color:#22c55e;color:#86efac}}
+
     /* ===== IA BUTTONS ===== */
     .ia-actions-inline{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 0}
     .btn-ia-inline{width:100%;padding:13px;border-radius:14px;border:0;font-weight:800;font-size:16px;background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.2);transition:transform .1s,box-shadow .15s}
@@ -246,6 +254,20 @@
 <input type="hidden" id="neufSelect" value="non">
 <input type="hidden" id="usiteSelect" value="non">
 
+<div class="status-card status-temps">
+  <div class="status-title">TEMPS / TYPE</div>
+  <div class="temps-options" id="tempsOptions">
+    <label class="temps-opt" data-val="FINS ET INTE"><input type="radio" name="tempsType" value="FINS ET INTE">FINS ET INTE</label>
+    <label class="temps-opt" data-val="VISI"><input type="radio" name="tempsType" value="VISI">VISI</label>
+    <label class="temps-opt" data-val="MIGR"><input type="radio" name="tempsType" value="MIGR">MIGR</label>
+    <label class="temps-opt" data-val="AUTRE"><input type="radio" name="tempsType" value="AUTRE">AUTRE</label>
+  </div>
+  <div id="tempsAutreWrap" style="display:none;margin-top:8px">
+    <input id="tempsAutreInput" placeholder="Préciser…" />
+  </div>
+</div>
+<input type="hidden" id="tempsTypeSelect" value="">
+
 <label>Commentaire (optionnel)</label>
           <input id="commentInput" placeholder="Ex: HS, retour, etc." />
         </div>
@@ -274,7 +296,7 @@
           <table>
             <thead>
               <tr>
-                <th>Référence</th><th>Qté</th><th>Neuf</th><th>Usité</th><th>Commentaire</th><th></th>
+                <th>Référence</th><th>Qté</th><th>Neuf</th><th>Usité</th><th>Temps/Type</th><th>Commentaire</th><th></th>
               </tr>
             </thead>
             <tbody id="lines"></tbody>
@@ -622,6 +644,18 @@ function initData(){
   $("usiteOui").addEventListener("change", () => setUsite($("usiteOui").checked ? "oui" : "non"));
   $("usiteNon").addEventListener("change", () => setUsite($("usiteNon").checked ? "non" : "oui"));
 
+  document.querySelectorAll("input[name='tempsType']").forEach(radio => {
+    radio.addEventListener("change", () => {
+      document.querySelectorAll("#tempsOptions .temps-opt").forEach(l => l.classList.remove("selected"));
+      if(radio.checked){
+        radio.closest(".temps-opt").classList.add("selected");
+        $("tempsTypeSelect").value = radio.value;
+        $("tempsAutreWrap").style.display = radio.value === "AUTRE" ? "" : "none";
+        if(radio.value !== "AUTRE") $("tempsAutreInput").value = "";
+      }
+    });
+  });
+
   // Mémoire NEUF/USITÉ par référence : pré-remplit à la sélection
   $("refSelect").addEventListener("change", () => {
     const ref = sanitizeRef($("refSelect").value);
@@ -651,6 +685,7 @@ function renderLines(){
         <td><span class="pill">×${l.qty}</span></td>
         <td>${l.neufOui ? "<span class='x'>✓</span>" : "<span style='color:var(--muted)'>—</span>"}</td>
         <td>${l.usiteOui ? "<span class='x' style='color:#d97706'>✓</span>" : "<span style='color:var(--muted)'>—</span>"}</td>
+        <td><span class="hint">${escapeHTML(l.tempsType || "")}</span></td>
         <td><span class="hint">${escapeHTML(l.comment || "")}</span></td>
         <td class="right"><button class="danger small" data-del="${idx}" title="Supprimer">🗑</button></td>
       `;
@@ -701,12 +736,30 @@ function escapeHTML(s){
 }
 
 /* --------------------- Add line --------------------- */
+function resetTempsType(){
+  document.querySelectorAll("#tempsOptions .temps-opt").forEach(l => l.classList.remove("selected"));
+  document.querySelectorAll("input[name='tempsType']").forEach(r => r.checked = false);
+  $("tempsTypeSelect").value = "";
+  $("tempsAutreInput").value = "";
+  $("tempsAutreWrap").style.display = "none";
+}
+
+function getTempsType(){
+  const val = $("tempsTypeSelect").value;
+  if(val === "AUTRE"){
+    const txt = ($("tempsAutreInput").value || "").trim();
+    return txt ? "AUTRE: " + txt : "AUTRE";
+  }
+  return val;
+}
+
 function resetLineForm(){
   $("refSelect").selectedIndex = 0;
   $("qtyInput").value = "1";
   $("commentInput").value = "";
   setNeuf("non");
   setUsite("non");
+  resetTempsType();
 }
 
 function addArticle(){
@@ -715,6 +768,7 @@ function addArticle(){
   const qty = Math.max(1, parseInt($("qtyInput").value || "1", 10));
   const neufOui = $("neufSelect").value === "oui";
   const usiteOui = $("usiteSelect").value === "oui";
+  const tempsType = getTempsType();
   const comment = sanitizeRef($("commentInput").value);
 
   // Détection de doublon — propose de fusionner
@@ -732,7 +786,7 @@ function addArticle(){
     // Sinon on ajoute une 2e ligne quand même
   }
 
-  lines.push({ ref, qty, neufOui, usiteOui, comment });
+  lines.push({ ref, qty, neufOui, usiteOui, tempsType, comment });
 
   // Mémorise l’état NEUF/USITÉ pour cette référence
   if(neufOui || usiteOui) saveCondForRef(ref, neufOui, usiteOui);
